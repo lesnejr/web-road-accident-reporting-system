@@ -1,0 +1,1051 @@
+/* Design tokens lifted from bahaba.ph's stylesheet so the app matches the
+   reference. Dark is the default; the light values are its own light variant.
+   Everything below reads hsl(var(--token)) so one token set drives both themes. */
+
+:root {
+  --surface-0: 210 30% 6%;
+  --surface-1: 210 26% 9%;
+  --surface-2: 209 24% 13%;
+  --surface-3: 209 22% 17%;
+  --line: 210 20% 100%;
+  --line-alpha: 0.09;
+  --line-strong-alpha: 0.16;
+  --text-1: 210 30% 94%;
+  --text-2: 212 16% 72%;
+  --text-3: 213 15% 56%;
+
+  --accent: 216 94% 49%;
+  --accent-hover: 216 95% 58%;
+  --accent-ink: 210 40% 99%;
+  --accent-text: 216 96% 68%;
+
+  --level-none: 160 84% 52%;
+  --level-light: 172 66% 50%;
+  --level-moderate: 43 96% 56%;
+  --level-heavy: 27 96% 61%;
+  --level-severe: 0 84% 60%;
+  --level-violet: 258 90% 70%;
+
+  --shadow-color: 210 40% 2%;
+  --shadow-alpha: 0.55;
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+
+  /* Report status hues. Verified and resolved are both positive, so they are
+     split into teal and green to stay tellable apart at a glance. */
+  --status-submitted: 212 16% 72%;
+  --status-under_review: var(--level-moderate);
+  --status-needs_clarification: var(--level-heavy);
+  --status-verified: var(--level-light);
+  --status-assigned: var(--level-violet);
+  --status-in_progress: var(--accent);
+  --status-resolved: var(--level-none);
+  --status-rejected: var(--level-severe);
+  --role-reporter: 212 16% 72%;
+  --role-admin: var(--accent);
+  --role-traffic_officer: var(--level-light);
+  --role-active: var(--level-none);
+
+  color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --surface-0: 210 40% 98%;
+  --surface-1: 0 0% 100%;
+  --surface-2: 210 40% 96%;
+  --surface-3: 214 32% 91%;
+  --line: 215 28% 25%;
+  --line-alpha: 0.12;
+  --line-strong-alpha: 0.2;
+  --text-1: 222 47% 11%;
+  --text-2: 215 22% 33%;
+  --text-3: 215 16% 44%;
+
+  --accent: 216 94% 45%;
+  --accent-hover: 216 96% 38%;
+  --accent-ink: 210 40% 99%;
+  --accent-text: 216 92% 38%;
+
+  --level-none: 161 94% 26%;
+  --level-light: 175 84% 28%;
+  --level-moderate: 32 95% 38%;
+  --level-heavy: 21 90% 42%;
+  --level-severe: 0 74% 45%;
+  --level-violet: 262 83% 48%;
+
+  --shadow-color: 215 30% 30%;
+  --shadow-alpha: 0.13;
+
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { background-color: hsl(var(--surface-0)); }
+
+body {
+  /* Geist only applies if the webfont is ever added; the stack degrades cleanly. */
+  font-family: 'Geist', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  line-height: 1.55;
+  background-color: hsl(var(--surface-0));
+  color: hsl(var(--text-1));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 { line-height: 1.3; color: hsl(var(--text-1)); letter-spacing: -0.01em; }
+
+a { color: hsl(var(--accent-text)); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+p.muted, .muted { color: hsl(var(--text-3)); }
+
+/* Numbers line up in columns and tables. */
+.numeric { font-variant-numeric: tabular-nums; }
+
+button { cursor: pointer; font-family: inherit; }
+button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: 2px; }
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: 0.9375rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius-sm);
+  width: 100%;
+  background-color: hsl(var(--surface-2));
+  color: hsl(var(--text-1));
+  transition: border-color 0.15s;
+}
+input::placeholder, textarea::placeholder { color: hsl(var(--text-3)); }
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: hsl(var(--accent));
+  box-shadow: 0 0 0 1px hsl(var(--accent));
+}
+textarea { min-height: 96px; resize: vertical; }
+
+/* Checkboxes and radios must not inherit the full-width text-input styling. */
+input[type='checkbox'], input[type='radio'] {
+  width: auto;
+  padding: 0;
+  accent-color: hsl(var(--accent));
+}
+/* A label wrapping a checkbox is a caption, not a field eyebrow. */
+label:has(input[type='checkbox']), label:has(input[type='radio']) {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: hsl(var(--text-2));
+}
+
+label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-weight: 500;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: hsl(var(--text-3));
+}
+
+.container { max-width: 1200px; margin: 0 auto; padding: 1.75rem 1.25rem 3rem; }
+
+/* Full-height shell so a page can fill the space under the navbar (the map tab). */
+.app-shell { display: flex; flex-direction: column; min-height: 100dvh; }
+/* The map page is a fixed-height command centre. Pinning the shell's height makes
+   every height below it definite, so the map row takes the viewport and the
+   sidebar scrolls inside it. Without this the chain stays content-sized, the
+   sidebar's content sets the row height, and the panels anchored to the bottom
+   of the map drift below the fold. */
+.app-shell:has(.ops-page) { height: 100dvh; overflow: hidden; }
+/* width: 100% is what stops this flex item shrinking to its content. The
+   container's own `margin: 0 auto` would otherwise win over the default
+   `align-self: stretch` — auto cross-axis margins absorb the free space — and
+   the page would collapse to its content width instead of filling the shell. */
+.app-shell > main { flex: 1; min-height: 0; width: 100%; }
+
+.page-title { margin-bottom: 1.5rem; }
+.page-title h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; }
+.page-title p { color: hsl(var(--text-3)); margin-top: 0.2rem; font-size: 0.875rem; }
+
+/* Top bar. A floating pill rather than a full-bleed strip: inset from the shell
+   edges, fully rounded, with its own soft drop shadow. It stays in the flow and
+   sticky, so the page still scrolls under it and the map page keeps its height
+   budget below. The fill stays translucent so the blur has something to work
+   with, with the same hairline border and inset top highlight as the panels. */
+.navbar {
+  margin: 0.75rem;
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius);
+  background-color: hsl(var(--surface-1) / 0.55);
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.06), 0 16px 40px hsl(var(--shadow-color) / var(--shadow-alpha));
+  padding: 0.7rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  position: sticky;
+  top: 0.75rem;
+  z-index: 50;
+  backdrop-filter: blur(20px) saturate(150%);
+}
+.navbar strong { font-size: 0.9375rem; font-weight: 600; letter-spacing: -0.01em; }
+.navbar a {
+  color: hsl(var(--text-2));
+  font-weight: 500;
+  font-size: 0.875rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.15s, color 0.15s;
+}
+.navbar a:hover { background-color: hsl(var(--surface-2)); color: hsl(var(--text-1)); text-decoration: none; }
+.navbar a.active { background-color: hsl(var(--accent) / 0.15); color: hsl(var(--accent-text)); }
+.navbar a.active:hover { background-color: hsl(var(--accent) / 0.25); color: hsl(var(--accent-text)); }
+
+.notification-bell { display: flex; align-items: center; }
+
+/* Surfaces */
+.card {
+  background-color: hsl(var(--surface-1));
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius);
+  box-shadow: inset 0 1px 0 hsl(var(--line) / 0.08), 0 16px 40px hsl(var(--shadow-color) / var(--shadow-alpha));
+  padding: 1.35rem;
+  margin-bottom: 1rem;
+}
+.card h3 { font-size: 0.9375rem; font-weight: 600; }
+/* Let wide tables scroll inside their card instead of breaking the layout. */
+.card:has(.table) { overflow-x: auto; }
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-weight: 500;
+  font-size: 0.875rem;
+  line-height: 1.2;
+  text-decoration: none;
+  transition: background-color 0.15s, color 0.15s, opacity 0.15s;
+}
+.btn:hover { text-decoration: none; }
+.btn-primary { background-color: hsl(var(--accent)); color: hsl(var(--accent-ink)); }
+.btn-primary:hover { background-color: hsl(var(--accent-hover)); color: hsl(var(--accent-ink)); }
+.btn-secondary { background-color: hsl(var(--surface-2)); color: hsl(var(--text-1)); border-color: hsl(var(--line) / var(--line-strong-alpha)); }
+.btn-secondary:hover { background-color: hsl(var(--surface-3)); color: hsl(var(--text-1)); }
+.btn-danger { background-color: hsl(var(--level-severe)); color: hsl(var(--accent-ink)); }
+.btn-danger:hover { background-color: hsl(var(--level-severe) / 0.85); color: hsl(var(--accent-ink)); }
+.btn-success { background-color: hsl(var(--level-none)); color: hsl(var(--accent-ink)); }
+.btn-success:hover { background-color: hsl(var(--level-none) / 0.85); color: hsl(var(--accent-ink)); }
+
+/* Forms */
+.form-group { margin-bottom: 1.1rem; }
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+
+/* Status and role pills: tinted translucent fill, hairline edge.
+   The text is the status hue blended 25% toward the theme's own text colour, so
+   it darkens on the light theme and lightens on the dark one. The raw hue alone
+   only reaches ~4.2:1 against its own tint, which fails AA for text this small. */
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+  white-space: nowrap;
+  background-color: hsl(var(--badge, var(--text-3)) / 0.14);
+  color: color-mix(in srgb, hsl(var(--badge, var(--text-3))) 75%, hsl(var(--text-1)) 25%);
+  border: 1px solid hsl(var(--badge, var(--text-3)) / 0.3);
+}
+.badge-submitted { --badge: var(--status-submitted); }
+.badge-under_review { --badge: var(--status-under_review); }
+.badge-needs_clarification { --badge: var(--status-needs_clarification); }
+.badge-verified { --badge: var(--status-verified); }
+.badge-assigned { --badge: var(--status-assigned); }
+.badge-in_progress { --badge: var(--status-in_progress); }
+.badge-resolved { --badge: var(--status-resolved); }
+.badge-rejected { --badge: var(--status-rejected); }
+.badge-reporter { --badge: var(--role-reporter); }
+.badge-admin { --badge: var(--role-admin); }
+.badge-traffic_officer { --badge: var(--role-traffic_officer); }
+.badge-active { --badge: var(--role-active); }
+
+/* Tables */
+.table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.table th, .table td { padding: 0.65rem 0.8rem; text-align: left; border-bottom: 1px solid hsl(var(--line) / var(--line-alpha)); vertical-align: middle; }
+.table th {
+  background-color: hsl(var(--surface-2));
+  font-weight: 500;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: hsl(var(--text-3));
+  white-space: nowrap;
+}
+.table tbody tr { transition: background-color 0.12s; }
+.table tbody tr:hover { background-color: hsl(var(--surface-2) / 0.6); }
+.table tbody tr:last-child td { border-bottom: none; }
+
+/* Feedback. Text is blended toward the theme text colour for the same reason as
+   the badges: the raw level hue does not reach AA against its own tint. */
+.alert { padding: 0.8rem 1rem; border-radius: var(--radius-sm); margin-bottom: 1rem; font-size: 0.875rem; border: 1px solid; }
+.alert-error {
+  background-color: hsl(var(--level-severe) / 0.14);
+  color: color-mix(in srgb, hsl(var(--level-severe)) 75%, hsl(var(--text-1)) 25%);
+  border-color: hsl(var(--level-severe) / 0.3);
+}
+.alert-success {
+  background-color: hsl(var(--level-none) / 0.14);
+  color: color-mix(in srgb, hsl(var(--level-none)) 75%, hsl(var(--text-1)) 25%);
+  border-color: hsl(var(--level-none) / 0.3);
+}
+.alert-info {
+  background-color: hsl(var(--accent) / 0.14);
+  color: hsl(var(--accent-text));
+  border-color: hsl(var(--accent) / 0.3);
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: hsl(var(--surface-0) / 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 100;
+}
+.modal {
+  background-color: hsl(var(--surface-1));
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius);
+  box-shadow: inset 0 1px 0 hsl(var(--line) / 0.08), 0 16px 40px hsl(var(--shadow-color) / 0.62);
+  padding: 1.35rem;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.status-filter { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
+.status-filter select { width: auto; min-width: 180px; }
+
+/* Theme switch */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  background-color: hsl(var(--surface-2));
+  color: hsl(var(--text-2));
+  transition: background-color 0.15s, color 0.15s;
+}
+.theme-toggle:hover { background-color: hsl(var(--surface-3)); color: hsl(var(--text-1)); }
+
+/* Operations map: a full-screen command centre. The sidebar carries the
+   readouts, the map takes everything else, and the panels float over it. */
+main.container:has(.ops-page) { max-width: none; padding: 0; display: flex; }
+
+.ops-page {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  /* The sidebar's width is referenced by the panels that have to sit clear of it
+     once it floats over the map instead of holding a column open. */
+  --ops-side-w: 380px;
+}
+
+/* Critical alert bar. The only full-width warning strip in the app, so it keeps
+   its weight even beside the red call buttons. */
+.ops-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 1rem;
+  font-size: 0.8125rem;
+  border-bottom: 1px solid hsl(var(--line) / var(--line-alpha));
+  background-color: hsl(var(--level-severe) / 0.16);
+}
+.ops-alert.is-clear { background-color: hsl(var(--level-none) / 0.14); }
+.ops-alert-icon {
+  display: grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: none;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  background-color: hsl(var(--level-severe));
+  color: hsl(var(--accent-ink));
+}
+.ops-alert.is-clear .ops-alert-icon { background-color: hsl(var(--level-none)); }
+.ops-alert-detail { color: hsl(var(--text-2)); }
+.ops-alert-more {
+  margin-left: auto;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  background-color: hsl(var(--line) / var(--line-alpha));
+  color: hsl(var(--text-2));
+}
+
+/* The ambient glow is painted behind both panes, but the map is opaque, so the
+   glow only shows through the glass sidebar. That is what gives the blur
+   something to diffuse, and it keeps the panel from reading as a flat black
+   column. On small screens the sidebar becomes a drawer over the map, so there
+   the blur picks up the tiles instead. */
+.ops-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background-image:
+    radial-gradient(80% 55% at 4% 6%, hsl(var(--accent) / 0.3), transparent 72%),
+    radial-gradient(70% 50% at 10% 96%, hsl(var(--level-violet) / 0.18), transparent 72%);
+}
+
+/* Sidebar. Scrolls on its own, so the map never moves with it. Frosted glass:
+   a translucent fill plus a backdrop blur, with the hairline border and the
+   inset top highlight the rest of the panels use. Like the top bar it floats as
+   a detached panel: inset on every side, so the ambient glow shows around it and
+   a gap separates it from the map in place of a dividing border. */
+.ops-side {
+  width: var(--ops-side-w);
+  flex: none;
+  /* Without this a flex item's automatic minimum size is its content height, so
+     the sidebar would stretch the whole row and push the map's bottom-anchored
+     panels below the fold instead of scrolling on its own. */
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0.85rem;
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius);
+  background-color: hsl(var(--surface-1) / 0.55);
+  backdrop-filter: blur(20px) saturate(150%);
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.06), 0 16px 40px hsl(var(--shadow-color) / var(--shadow-alpha));
+  /* The native bar is a square-cornered rectangle flush against the right edge, so
+     it squares off the panel's rounded corners. Transparent track + an inset,
+     pill-shaped thumb keeps every square edge away from the corners. */
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--line) / 0.28) transparent;
+}
+
+.ops-side::-webkit-scrollbar { width: 12px; }
+.ops-side::-webkit-scrollbar-track { background: transparent; }
+.ops-side::-webkit-scrollbar-thumb {
+  border: 4px solid transparent;
+  border-radius: 999px;
+  background-color: hsl(var(--line) / 0.28);
+  background-clip: content-box;
+}
+.ops-side::-webkit-scrollbar-thumb:hover { background-color: hsl(var(--line) / 0.45); }
+
+.ops-brand { display: flex; align-items: center; gap: 0.6rem; }
+.ops-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background-color: hsl(var(--accent) / 0.16);
+  color: hsl(var(--accent-text));
+}
+.ops-brand strong { display: block; font-size: 0.875rem; }
+.ops-brand .muted {
+  display: block;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.ops-section { display: flex; flex-direction: column; gap: 0.5rem; }
+.ops-sec-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: hsl(var(--text-3));
+}
+
+.ops-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; }
+.ops-stat {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  border: 1px solid hsl(var(--line) / var(--line-alpha));
+  border-radius: var(--radius-sm);
+  background-color: hsl(var(--surface-2) / 0.7);
+  padding: 0.45rem 0.55rem;
+}
+.ops-stat-value { display: block; font-size: 1.15rem; font-weight: 600; line-height: 1.25; }
+.ops-stat-label { display: block; font-size: 0.6875rem; color: hsl(var(--text-3)); }
+
+.ops-mix { list-style: none; display: flex; flex-direction: column; gap: 0.3rem; }
+.ops-mix-row {
+  display: grid;
+  grid-template-columns: 4.6rem 1fr 1.6rem;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.75rem;
+}
+.ops-mix-label { color: hsl(var(--text-2)); }
+.ops-mix-bar {
+  height: 0.3rem;
+  border-radius: 999px;
+  background-color: hsl(var(--line) / var(--line-alpha));
+  overflow: hidden;
+}
+.ops-mix-bar span { display: block; height: 100%; background-color: hsl(var(--sev, var(--text-3))); }
+.ops-mix-value { text-align: right; color: hsl(var(--text-2)); }
+
+/* One severity ramp, shared by the mix bars, the report card and the pins. */
+.sev-fatal { --sev: var(--level-severe); }
+.sev-major { --sev: var(--level-heavy); }
+.sev-moderate { --sev: var(--level-moderate); }
+.sev-minor { --sev: var(--level-none); }
+.sev-unknown { --sev: var(--text-3); }
+
+/* Hotspot pins glow so they carry against the dark basemap, and the halo
+   breathes to pull the eye to the newest markers. The colour comes from the
+   shared severity ramp above, so both themes stay in step. */
+.ops-pin--core {
+  filter: drop-shadow(0 0 3px hsl(var(--sev, var(--text-3))))
+    drop-shadow(0 0 9px hsl(var(--sev, var(--text-3)) / 0.85));
+}
+.ops-pin--halo {
+  filter: drop-shadow(0 0 10px hsl(var(--sev, var(--text-3)) / 0.7));
+  /* Scale about the circle's own centre, not the SVG's origin. */
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ops-pin-breathe 2.6s ease-in-out infinite;
+}
+
+@keyframes ops-pin-breathe {
+  0%, 100% { transform: scale(0.88); opacity: 0.6; }
+  50% { transform: scale(1.28); opacity: 1; }
+}
+
+/* Keep the glow, drop the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .ops-pin--halo { animation: none; }
+}
+
+.ops-sev {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.6875rem;
+  text-transform: capitalize;
+  background-color: hsl(var(--sev) / 0.16);
+  color: color-mix(in srgb, hsl(var(--sev)) 75%, hsl(var(--text-1)) 25%);
+  border: 1px solid hsl(var(--sev) / 0.32);
+}
+
+.ops-empty, .ops-note { font-size: 0.75rem; line-height: 1.45; color: hsl(var(--text-3)); }
+.ops-loc { font-size: 0.75rem; color: hsl(var(--text-2)); }
+.ops-loc.is-denied, .ops-loc.is-error, .ops-loc.is-unsupported { color: hsl(var(--level-moderate)); }
+.ops-wide { width: 100%; }
+
+.ops-hotline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid hsl(var(--level-severe) / 0.4);
+  border-radius: var(--radius-sm);
+  background-color: hsl(var(--level-severe) / 0.14);
+  color: hsl(var(--text-1));
+}
+.ops-hotline:hover { background-color: hsl(var(--level-severe) / 0.22); text-decoration: none; }
+.ops-hotline strong { font-size: 1.05rem; }
+.ops-hotline .muted { display: block; font-size: 0.6875rem; }
+
+.ops-contacts { list-style: none; display: flex; flex-direction: column; gap: 0.3rem; }
+.ops-contact {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid hsl(var(--line) / var(--line-alpha));
+  border-radius: var(--radius-sm);
+  background-color: hsl(var(--surface-2) / 0.6);
+}
+.ops-contact-icon {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background-color: hsl(var(--line) / var(--line-alpha));
+  color: hsl(var(--text-2));
+}
+.ops-contact-text { flex: 1; min-width: 0; }
+.ops-contact-text strong { display: block; font-size: 0.75rem; }
+.ops-contact-text .muted { display: block; font-size: 0.6875rem; }
+.ops-call { padding: 0.25rem 0.6rem; font-size: 0.75rem; }
+
+/* The hotlines stay behind one button so the sidebar keeps its length, but the
+   button shows the emergency number even when collapsed. */
+.ops-expander {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid hsl(var(--level-severe) / 0.4);
+  border-radius: var(--radius-sm);
+  background-color: hsl(var(--level-severe) / 0.14);
+  color: hsl(var(--text-1));
+  text-align: left;
+}
+.ops-expander:hover { background-color: hsl(var(--level-severe) / 0.22); }
+.ops-expander-text { flex: 1; min-width: 0; }
+.ops-expander-text strong { display: block; font-size: 0.75rem; }
+.ops-expander-text .muted { display: block; font-size: 0.6875rem; }
+.ops-expander-chevron { flex: none; font-size: 0.9rem; color: hsl(var(--level-severe)); }
+.ops-hotlines { display: flex; flex-direction: column; gap: 0.4rem; }
+
+/* Cards that own their own border and padding (the layers card, the route card)
+   borrow the expander button but not its emergency colours, so it sits flush
+   inside them. */
+.ops-expander--plain {
+  border: 0;
+  padding: 0;
+  background-color: transparent;
+  color: hsl(var(--text-1));
+}
+.ops-expander--plain:hover { background-color: transparent; }
+.ops-expander--plain:hover .ops-expander-text strong { color: hsl(var(--accent-text)); }
+.ops-expander--plain .ops-expander-chevron { color: hsl(var(--text-3)); }
+.ops-layers-body { display: flex; flex-direction: column; gap: 0.35rem; }
+/* Folded route card: the header stays, the fields are put away. They stay mounted
+   so a typed place and its suggestions survive being folded. */
+.ops-float--route.is-folded > :not(.ops-route-head) { display: none; }
+
+/* Map area and the panels floating over it. */
+.ops-map { position: relative; flex: 1; min-width: 0; min-height: 0; }
+
+/* Only shown once the sidebar turns into a drawer, below 820px. */
+.ops-side-toggle { display: none; }
+.ops-drawer-close { display: none; }
+
+.ops-float {
+  position: absolute;
+  z-index: 1100;
+  padding: 0.75rem;
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius-sm);
+  background-color: hsl(var(--surface-1) / 0.72);
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.07),
+    0 16px 40px hsl(var(--shadow-color) / var(--shadow-alpha));
+  backdrop-filter: blur(18px) saturate(150%);
+}
+/* The right-hand column of the map. Both floating stacks live in it so they can
+   never overlap however short the window is: the route card shrinks and scrolls
+   first, and the layers panel stays pinned to the bottom. */
+.ops-rail {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  bottom: 1.9rem;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.6rem;
+  /* The column only guides the two cards; the map keeps the pointer everywhere
+     between them. */
+  pointer-events: none;
+}
+.ops-rail > * { pointer-events: auto; }
+
+.ops-float--detail { left: 0.75rem; bottom: 0.75rem; width: min(300px, calc(100% - 1.5rem)); }
+/* Laid out by .ops-rail rather than positioned absolutely, so it stacks with the
+   layers panel instead of overlapping it. */
+.ops-float--route {
+  position: static;
+  width: 17rem;
+  max-width: 100%;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.ops-float-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.ops-close {
+  display: grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  flex: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: hsl(var(--text-3));
+  font-size: 0.75rem;
+  line-height: 1;
+}
+.ops-close:hover { background-color: hsl(var(--surface-3)); color: hsl(var(--text-1)); }
+
+.ops-float--detail h3 { font-size: 0.875rem; margin: 0.2rem 0; }
+.ops-detail-loc { font-size: 0.75rem; }
+.ops-rows { display: flex; flex-direction: column; gap: 0.2rem; margin: 0.6rem 0 0.75rem; }
+.ops-rows > div { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; font-size: 0.75rem; }
+.ops-rows dt { color: hsl(var(--text-3)); }
+.ops-rows dd { text-align: right; color: hsl(var(--text-1)); }
+
+/* The route card sits over an opaque map, so its fields use a compact
+   version of the form styling the rest of the app uses. */
+.ops-route-field { display: flex; flex-direction: column; }
+.ops-route-field label { margin-bottom: 0.2rem; }
+/* Typed start/end replace the old dropdown, so the field is sized like the
+   select it replaced rather than like the full-size form inputs. */
+.ops-place input { font-size: 0.75rem; padding: 0.35rem 0.45rem; }
+/* Field eyebrows are spans rather than labels, so they need their own
+   spacing from the control below them. */
+.ops-route-field .ops-layers-title { margin-bottom: 0.25rem; }
+
+/* "Set this end on the map" toggle under each route picker. */
+.ops-pick {
+  margin-top: 0.25rem;
+  padding: 0.25rem 0.45rem;
+  border: 1px dashed hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: hsl(var(--text-2));
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  text-align: left;
+}
+.ops-pick:hover { color: hsl(var(--text-1)); border-color: hsl(var(--accent) / 0.6); }
+/* Armed: the next click on the map sets this end. */
+.ops-pick.is-armed {
+  border-style: solid;
+  border-color: hsl(var(--accent));
+  background-color: hsl(var(--accent) / 0.18);
+  color: hsl(var(--accent-text));
+}
+
+/* The suggestion list sits under its field rather than floating over it: this
+   card scrolls with overflow-y: auto, which would clip an absolutely positioned
+   list. Keeping it in the flow means it grows the card and scrolls with it. */
+.ops-suggest {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.3rem;
+  max-height: 12.5rem;
+  overflow-y: auto;
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius-sm);
+  background-color: hsl(var(--surface-2));
+}
+.ops-suggest-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border: 0;
+  background-color: transparent;
+  color: hsl(var(--text-1));
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+/* Pointer and arrow keys agree on one highlight. */
+.ops-suggest-item:hover, .ops-suggest-item.is-active {
+  background-color: hsl(var(--accent) / 0.18);
+}
+.ops-suggest-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ops-suggest-hint {
+  flex: none;
+  color: hsl(var(--text-3));
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ops-suggest-empty { padding: 0.45rem 0.5rem; font-size: 0.6875rem; color: hsl(var(--text-3)); }
+.ops-place-status { margin-top: 0.25rem; font-size: 0.625rem; color: hsl(var(--text-3)); }
+
+/* Turn-by-turn, followed inside the page rather than handed to Google Maps. */
+.ops-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0.55rem;
+  border: 1px solid hsl(var(--accent) / 0.4);
+  border-radius: var(--radius-sm);
+  background-color: hsl(var(--accent) / 0.08);
+}
+.ops-nav-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.ops-nav-remaining { font-size: 0.6875rem; color: hsl(var(--text-2)); }
+.ops-nav-turn { margin: 0; font-size: 0.8125rem; line-height: 1.35; color: hsl(var(--text-1)); }
+.ops-nav-buttons { display: flex; gap: 0.35rem; }
+.ops-nav-buttons .btn { flex: 1; padding: 0.3rem 0.4rem; font-size: 0.6875rem; }
+
+.ops-actions {
+  /* Pushed to the bottom of .ops-rail and never shrunk, so the report button
+     stays reachable however long the route card grows. */
+  margin-top: auto;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+.ops-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius-sm);
+  background-color: hsl(var(--surface-1) / 0.72);
+  box-shadow: inset 0 1px 0 hsl(0 0% 100% / 0.07),
+    0 16px 40px hsl(var(--shadow-color) / var(--shadow-alpha));
+  backdrop-filter: blur(18px) saturate(150%);
+}
+
+/* Small segmented buttons. One set of rules styles both segmented groups on the
+   map: the basemap switcher, which stays available because the severity list is
+   the part that gets dropped on small screens, and the vehicle selector in the
+   route card. */
+.ops-basemaps, .ops-vehicles { display: flex; gap: 0.25rem; }
+.ops-basemap, .ops-vehicle {
+  flex: 1;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius-sm);
+  background-color: hsl(var(--surface-2) / 0.6);
+  color: hsl(var(--text-2));
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.ops-basemap:hover, .ops-vehicle:hover {
+  color: hsl(var(--text-1));
+  border-color: hsl(var(--accent) / 0.5);
+}
+.ops-basemap.is-active, .ops-vehicle.is-active {
+  background-color: hsl(var(--accent) / 0.2);
+  border-color: hsl(var(--accent));
+  color: hsl(var(--accent-text));
+}
+
+.ops-layers-list { display: flex; flex-direction: column; gap: 0.2rem; }
+.ops-layers-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: hsl(var(--text-3));
+}
+.ops-layer {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  color: hsl(var(--text-2));
+}
+.ops-report-btn { box-shadow: 0 10px 26px hsl(var(--shadow-color) / var(--shadow-alpha)); }
+
+/* Below desktop the sidebar narrows, then becomes a drawer over the map. */
+@media (max-width: 1200px) {
+  .ops-page { --ops-side-w: 340px; }
+  /* Narrowed, but not below the point where the two report pickers stop
+     holding a whole report reference. */
+  .ops-float--route { width: 15rem; }
+}
+
+.map-list { list-style: none; margin-top: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.map-list-item {
+  display: grid;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+  background-color: transparent;
+  border: 1px solid hsl(var(--line) / var(--line-alpha));
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.7rem;
+  font: inherit;
+  color: inherit;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+.map-list-item:hover { border-color: hsl(var(--accent) / 0.5); background-color: hsl(var(--surface-2)); }
+.map-list-item.is-selected { border-color: hsl(var(--accent)); background-color: hsl(var(--accent) / 0.12); }
+.map-list-ref { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 0.6875rem; color: hsl(var(--text-3)); }
+.map-list-title { font-weight: 500; font-size: 0.875rem; color: hsl(var(--text-1)); }
+.map-list-loc { font-size: 0.75rem; }
+.map-list-item .badge { justify-self: start; margin-top: 0.2rem; }
+.map-list-link { display: inline-block; margin: 0.3rem 0 0.2rem 0.2rem; font-size: 0.75rem; }
+
+/* Recharts renders pie labels in its own grey; tie it to the text tokens. */
+.recharts-pie-label-text { fill: hsl(var(--text-2)); }
+
+/* Leaflet renders its own light chrome; nudge the controls and popups to match. */
+.leaflet-container { background-color: hsl(var(--surface-0)); font-family: inherit; }
+/* OpenStreetMap is a light basemap with no dark variant, so only the OSM
+   fallback is dimmed to sit under the dark UI. CARTO's dark tiles are already
+   dark and are left untouched. The dim is capped short of an invert because
+   inverting would turn the white roads black and hide them. */
+.map--osm .leaflet-tile-pane {
+  filter: brightness(0.78) saturate(0.9);
+}
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background-color: hsl(var(--surface-1));
+  color: hsl(var(--text-1));
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+}
+.leaflet-container a.leaflet-popup-close-button { color: hsl(var(--text-3)); }
+.leaflet-bar {
+  border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 26px hsl(var(--shadow-color) / var(--shadow-alpha));
+}
+.leaflet-bar a {
+  background-color: hsl(var(--surface-1) / 0.8);
+  color: hsl(var(--text-1));
+  border-bottom-color: hsl(var(--line) / var(--line-alpha));
+  backdrop-filter: blur(12px);
+}
+.leaflet-bar a:hover { background-color: hsl(var(--surface-2) / 0.95); }
+/* Slightly larger than Leaflet's 30px default so the zoom buttons are easy to
+   hit with a thumb or a trackpad. */
+.leaflet-control-zoom a { width: 2.1rem; height: 2.1rem; line-height: 2.1rem; font-size: 1.15rem; }
+.leaflet-control-attribution {
+  background-color: hsl(var(--surface-1) / 0.8);
+  color: hsl(var(--text-3));
+}
+.leaflet-control-attribution a { color: hsl(var(--accent-text)); }
+
+/* Desktop gives the whole viewport to the map. It becomes a fixed layer behind
+   the chrome, so the top bar, the sidebar and the floating panels all sit on top
+   of it rather than taking a column or a row away from it. Anything the map
+   positions for itself then has to be pushed clear of that chrome, which is why
+   the top bar's combined height is measured into --ops-chrome-h (see MapPage). */
+@media (min-width: 1024px) {
+  .ops-body { position: relative; }
+  /* z-index 0 gives the map its own stacking context pinned below the chrome, so
+     the panels that float inside it stay above its tiles but below the top bar. */
+  .ops-map { position: fixed; inset: 0; z-index: 0; }
+
+  /* Floats over the map rather than holding a column open beside it. */
+  .ops-side {
+    position: absolute;
+    inset: 0.85rem auto 0.85rem 0.85rem;
+    margin: 0;
+    z-index: 2;
+  }
+
+  .ops-rail { top: calc(var(--ops-chrome-h, 5rem) + 0.75rem); }
+  .ops-float--detail { left: calc(var(--ops-side-w) + 1.75rem); }
+  .leaflet-top.leaflet-left {
+    top: calc(var(--ops-chrome-h, 5rem) + 0.75rem);
+    left: calc(var(--ops-side-w) + 1.75rem);
+  }
+
+  /* Match the map's corners to the floating panels. The radius is an inline
+     style on a shared component, so it has to win with !important. */
+  .ops-map > div:has(> .leaflet-container) { border-radius: var(--radius) !important; }
+}
+
+/* Below 1024px the sidebar stops being a column and becomes a drawer the user
+   toggles over the map, so the map keeps the whole width. */
+@media (max-width: 1023px) {
+  .ops-body { position: relative; }
+  .ops-side {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 1200;
+    width: min(340px, 86%);
+    /* The floating margins are dropped here: the drawer slides in from the screen
+       edge, and a left margin would leave a sliver of it visible when closed. Only
+       the far corners stay rounded, since the near ones sit on the edge. */
+    margin: 0;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+  }
+  .ops-body.is-side-open .ops-side { transform: none; }
+  /* Sits clear of Leaflet's zoom control in the top-left corner. */
+  .ops-side-toggle {
+    position: absolute;
+    top: 0.75rem;
+    left: 3.4rem;
+    z-index: 1100;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+    border-radius: var(--radius-sm);
+    background-color: hsl(var(--surface-1) / 0.95);
+    color: hsl(var(--text-1));
+    font-size: 0.75rem;
+  }
+  /* The map toggle is covered by the open drawer, so the drawer closes itself. */
+  .ops-drawer-close {
+    display: inline-flex;
+    align-self: flex-start;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid hsl(var(--line) / var(--line-strong-alpha));
+    border-radius: var(--radius-sm);
+    background-color: hsl(var(--surface-2));
+    color: hsl(var(--text-1));
+    font-size: 0.75rem;
+  }
+  /* The severity list would crowd a small screen, so it is dropped there. The
+     basemap switcher stays available inside the same expandable card, and the pins
+     still carry severity through their colour. */
+  .ops-layers-list { display: none; }
+  /* Sit above the Report button, which in turn stays clear of the attribution. */
+  .ops-float--detail {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 4.6rem;
+    width: auto;
+    max-height: 52%;
+    overflow-y: auto;
+  }
+}
+
+/* The rest of the app keeps its compact spacing on phones. */
+@media (max-width: 820px) {
+  .container { padding: 1.25rem 0.85rem 2.5rem; }
+  .navbar { padding: 0.6rem 0.85rem; }
+  .page-title h1 { font-size: 1.25rem; }
+}

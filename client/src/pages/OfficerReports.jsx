@@ -1,0 +1,42 @@
+﻿import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
+
+export default function OfficerReports() {
+  const { user } = useAuth();
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get('/traffic-officer/reports').then(res => { setReports(res.data); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="container">Loading...</div>;
+
+  return (
+    <div className="container">
+      <div className="page-title"><h1>My Assigned Reports</h1></div>
+
+      <div className="card">
+        {reports.length === 0 ? <p style={{ color: 'hsl(var(--text-3))' }}>No assigned reports.</p> : (
+          <table className="table">
+            <thead><tr><th>Reference</th><th>Title</th><th>Location</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
+            <tbody>
+              {reports.map(r => (
+                <tr key={r.id}>
+                  <td>{r.report_reference}</td>
+                  <td><Link to={`/reports/${r.id}`}>{r.title}</Link></td>
+                  <td>{r.location}</td>
+                  <td><span className={`badge badge-${r.status}`}>{r.status.replace('_', ' ')}</span></td>
+                  <td>{new Date(r.created_at).toLocaleDateString()}</td>
+                  <td><Link to={`/reports/${r.id}`} className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}>View</Link></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
