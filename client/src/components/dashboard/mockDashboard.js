@@ -42,6 +42,6 @@ export function mockDashboard({ year, compareYear, scope }) {
     byInjury: pct({ none: 80, injuries: 70, fatalities: 14, unknown: 10 }),
     byType: pct({ 'Vehicle Collision': 90, 'Motorcycle Accident': 60, 'Hit and Run': 25, 'Pedestrian Accident': 18, Other: 8 }),
     byVehicle: pct({ Motorcycle: 70, Car: 55, Tricycle: 30, Truck: 18, 'Bus/Jeepney': 12, Bicycle: 6 }),
-    locations, needsAttention
+    locations, needsAttention, recent: needsAttention.slice(0, 3)
   };
 }

@@ -16,7 +16,8 @@ const REASON_LABELS = {
 const ADMIN_NEXT = {
   submitted: ['under_review'],
   under_review: ['verified', 'rejected', 'needs_clarification'],
-  needs_clarification: ['under_review']
+  needs_clarification: ['under_review'],
+  in_progress: ['resolved']
 };
 const OFFICER_NEXT = {
   assigned: ['in_progress'],
