@@ -11,6 +11,18 @@ const REASON_LABELS = {
   location_text: 'matching location'
 };
 
+// Mirrors the server transition matrix (utils/helpers.js), which stays the
+// authority; the UI only offers actions that can actually succeed.
+const ADMIN_NEXT = {
+  submitted: ['under_review'],
+  under_review: ['verified', 'rejected', 'needs_clarification'],
+  needs_clarification: ['under_review']
+};
+const OFFICER_NEXT = {
+  assigned: ['in_progress'],
+  in_progress: ['needs_clarification', 'resolved']
+};
+
 export default function ReportDetail() {
   const { user } = useAuth();
   const { id } = useParams();
@@ -247,10 +259,10 @@ export default function ReportDetail() {
         <div className="card">
           <h3>Officer Actions</h3>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {['in_progress','needs_clarification','resolved'].map(s => (
-              <button key={s} className={`btn ${report.status === s ? 'btn-primary' : 'btn-secondary'}`}
+            {(OFFICER_NEXT[report.status] || []).map(s => (
+              <button key={s} className="btn btn-secondary"
                 onClick={() => { setAction({ type: 'status', status: s }); setActionText(''); }}
-                disabled={statusLoading || report.status === s}
+                disabled={statusLoading}
               >
                 {s.replace(/_/g, ' ')}
               </button>
@@ -295,15 +307,20 @@ export default function ReportDetail() {
         <div className="card">
           <h3>Admin Actions</h3>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {['verified','rejected','under_review','needs_clarification'].map(s => (
+            {(ADMIN_NEXT[report.status] || []).map(s => (
               <button key={s} className={`btn ${['verified','rejected'].includes(s) ? 'btn-danger' : 'btn-secondary'}`}
                 onClick={() => { setAction({ type: 'admin-status', status: s }); setActionText(''); }}
-                disabled={statusLoading || report.status === s}
+                disabled={statusLoading}
               >
                 {s.replace(/_/g, ' ')}
               </button>
             ))}
-            <button className="btn btn-primary" onClick={() => { setAction({ type: 'assign' }); setAssignTo(''); }} disabled={statusLoading}>Assign Officer</button>
+            {report.status === 'verified' && (
+              <button className="btn btn-primary" onClick={() => { setAction({ type: 'assign' }); setAssignTo(''); }} disabled={statusLoading}>Assign Officer</button>
+            )}
+            {!ADMIN_NEXT[report.status] && report.status !== 'verified' && (
+              <p className="muted" style={{ margin: 0 }}>No admin actions apply to a report that is {report.status.replace(/_/g, ' ')}.</p>
+            )}
           </div>
 
           {action?.type === 'admin-status' && (
