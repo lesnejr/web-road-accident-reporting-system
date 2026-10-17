@@ -10,6 +10,7 @@ import { Notification } from '../models/Notification.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { logAudit } from '../utils/helpers.js';
 import { detectFileType, sanitizeFileName } from '../utils/fileType.js';
+import { findDuplicateCandidates } from '../utils/duplicates.js';
 
 const router = express.Router();
 const UPLOAD_ROOT = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
@@ -98,6 +99,48 @@ router.get('/:id', async (req, res, next) => {
     const evidence = await Evidence.findByReport(report.id);
     const history = await StatusHistory.findByReport(report.id);
     res.json({ ...report, evidence, status_history: history });
+  } catch (err) { next(err); }
+});
+
+router.get('/:id/duplicates', requireRole('admin'), async (req, res, next) => {
+  try {
+    const report = await Report.findById(req.params.id);
+    if (!report) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Report not found' } });
+    const candidates = findDuplicateCandidates(report, await Report.findNearby(report));
+    res.json(candidates);
+  } catch (err) { next(err); }
+});
+
+// Marking and clearing duplicates is a human decision and is audited. Nothing
+// is merged automatically, and chains (B duplicates A, C duplicates B) are refused.
+router.patch('/:id/duplicate', requireRole('admin'), async (req, res, next) => {
+  try {
+    const report = await Report.findById(req.params.id);
+    if (!report) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Report not found' } });
+    const raw = req.body.duplicate_of_report_id;
+    if (raw === null || raw === undefined || raw === '') {
+      if (!report.duplicate_of_report_id) return res.json(report);
+      const cleared = await Report.setDuplicate(report.id, null);
+      await logAudit(req.user.id, 'DUPLICATE_CLEARED', 'report', report.id, req, { was_duplicate_of: report.duplicate_of_report_id });
+      return res.json(cleared);
+    }
+    const targetId = Number(raw);
+    if (!Number.isInteger(targetId) || targetId < 1) {
+      return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'duplicate_of_report_id must be a report id' } });
+    }
+    if (targetId === report.id) {
+      return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'A report cannot be a duplicate of itself' } });
+    }
+    const target = await Report.findById(targetId);
+    if (!target) {
+      return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'The original report does not exist' } });
+    }
+    if (target.duplicate_of_report_id) {
+      return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'The original report is itself marked as a duplicate, so chains are refused' } });
+    }
+    const flagged = await Report.setDuplicate(report.id, targetId);
+    await logAudit(req.user.id, 'DUPLICATE_FLAGGED', 'report', report.id, req, { duplicate_of_report_id: targetId });
+    res.json(flagged);
   } catch (err) { next(err); }
 });
 

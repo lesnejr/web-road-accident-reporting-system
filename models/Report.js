@@ -99,6 +99,23 @@ export const Report = {
     const [rows] = await pool.query(query, params);
     return { data: rows, total, page: filters.page, limit: filters.limit };
   },
+  // Reports within ±2 days of the target's accident date — enough to cover the
+  // 24 h window; the exact window is decided by utils/duplicates.js.
+  async findNearby(report) {
+    const [rows] = await pool.query(
+      `SELECT r.*, u.name as reporter_name, ac.name as category_name
+       FROM reports r
+       JOIN users u ON r.reporter_id = u.id
+       LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
+       WHERE r.id <> ? AND r.accident_date BETWEEN DATE_SUB(?, INTERVAL 2 DAY) AND DATE_ADD(?, INTERVAL 2 DAY)`,
+      [report.id, report.accident_date, report.accident_date]
+    );
+    return rows;
+  },
+  async setDuplicate(id, duplicateOfReportId) {
+    await pool.query('UPDATE reports SET duplicate_of_report_id = ? WHERE id = ?', [duplicateOfReportId, id]);
+    return this.findById(id);
+  },
   async update(id, data, user) {
     const fields = [];
     const params = [];

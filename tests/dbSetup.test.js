@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import mysql from 'mysql2/promise';
@@ -15,6 +16,7 @@ const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SETUP_DB = 'accident_reporting_setup_test';
 const PASSWORD = 'setup-test-pass';
+const MIGRATIONS = fs.readdirSync(path.join(ROOT, 'database', 'migrations')).filter((file) => file.endsWith('.sql')).length;
 if (!SETUP_DB.endsWith('_test')) throw new Error('setup test database must end with _test');
 
 const connect = (dbName) => mysql.createConnection({
@@ -38,11 +40,11 @@ test('db:setup is repeatable, keeps existing data, and seeds working dev account
     await admin.query(`DROP DATABASE IF EXISTS \`${SETUP_DB}\``);
 
     const first = await runSetup();
-    assert.match(first.stdout, /applied 1 migration/);
+    assert.match(first.stdout, new RegExp(`applied ${MIGRATIONS} migration`));
 
     const second = await runSetup();
     assert.match(second.stdout, /applied 0 migration/);
-    assert.match(second.stdout, /skipped 1/);
+    assert.match(second.stdout, new RegExp(`skipped ${MIGRATIONS}`));
 
     db = await connect(SETUP_DB);
     const [users] = await db.query('SELECT email, role, password_hash FROM users ORDER BY email');
@@ -55,7 +57,7 @@ test('db:setup is repeatable, keeps existing data, and seeds working dev account
     const [[{ categories }]] = await db.query('SELECT COUNT(*) AS categories FROM accident_categories');
     assert.equal(categories, 5);
     const [[{ migrations }]] = await db.query('SELECT COUNT(*) AS migrations FROM schema_migrations');
-    assert.equal(migrations, 1);
+    assert.equal(migrations, MIGRATIONS);
 
     // A user's own row and password hashes must survive another setup run untouched.
     await db.query("INSERT INTO users (name, email, password_hash) VALUES ('Existing User', 'existing@test.local', 'existing-hash')");
