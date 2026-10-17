@@ -20,6 +20,7 @@ router.use(requireAuth);
 
 const STATUSES = ['submitted', 'under_review', 'needs_clarification', 'verified', 'assigned', 'in_progress', 'resolved', 'rejected'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SORTABLE = ['created_at', 'accident_date', 'status', 'report_reference'];
 
 router.post('/', requireRole('reporter', 'admin'), async (req, res, next) => {
   try {
@@ -37,7 +38,7 @@ router.post('/', requireRole('reporter', 'admin'), async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const { status, category_id, date_from, date_to, q } = req.query;
+    const { status, category_id, date_from, date_to, q, sort, direction, page, limit } = req.query;
     if (status && !STATUSES.includes(String(status))) {
       return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'Unknown status filter' } });
     }
@@ -48,13 +49,42 @@ router.get('/', async (req, res, next) => {
     if (category_id && !Number.isInteger(categoryId)) {
       return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'category_id must be a number' } });
     }
-    const reports = await Report.list(req.user, {
+    const sortKey = sort ? String(sort) : 'created_at';
+    if (sort && !SORTABLE.includes(sortKey)) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: `sort must be one of: ${SORTABLE.join(', ')}` } });
+    }
+    const sortDirection = direction ? String(direction).toLowerCase() : 'desc';
+    if (direction && !['asc', 'desc'].includes(sortDirection)) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'direction must be asc or desc' } });
+    }
+    // Pagination only applies when page or limit is supplied; callers that do not
+    // ask for it keep receiving the plain array they always have.
+    let pageNumber = null;
+    let pageLimit = null;
+    if (page !== undefined || limit !== undefined) {
+      pageNumber = page === undefined ? 1 : Number(page);
+      pageLimit = limit === undefined ? 10 : Number(limit);
+      if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+        return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'page must be a positive integer' } });
+      }
+      if (!Number.isInteger(pageLimit) || pageLimit < 1 || pageLimit > 100) {
+        return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'limit must be an integer between 1 and 100' } });
+      }
+    }
+    const filters = {
       status: status || null,
       categoryId,
       dateFrom: date_from || null,
       dateTo: date_to || null,
-      search: q ? String(q).trim().slice(0, 100) || null : null
-    });
+      search: q ? String(q).trim().slice(0, 100) || null : null,
+      sort: sortKey,
+      direction: sortDirection
+    };
+    if (pageNumber !== null) {
+      const result = await Report.listPage(req.user, { ...filters, page: pageNumber, limit: pageLimit });
+      return res.json(result);
+    }
+    const reports = await Report.list(req.user, filters);
     res.json(reports);
   } catch (err) { next(err); }
 });

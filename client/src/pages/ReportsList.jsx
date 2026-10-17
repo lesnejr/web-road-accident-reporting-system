@@ -8,6 +8,7 @@ const STATUS_OPTIONS = ['submitted', 'under_review', 'needs_clarification', 'ver
 export default function ReportsList() {
   const { user } = useAuth();
   const [reports, setReports] = useState([]);
+  const [total, setTotal] = useState(0);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -23,6 +24,10 @@ export default function ReportsList() {
     date_to: searchParams.get('date_to') || '',
     q: searchParams.get('q') || ''
   };
+  const sort = searchParams.get('sort') || 'created_at';
+  const direction = searchParams.get('direction') || 'desc';
+  const page = Math.max(1, Number(searchParams.get('page')) || 1);
+  const PAGE_SIZE = 10;
 
   // The search box is applied after a short pause so each keystroke is not a request.
   useEffect(() => {
@@ -31,6 +36,7 @@ export default function ReportsList() {
         const next = new URLSearchParams(previous);
         if (searchText.trim()) next.set('q', searchText.trim());
         else next.delete('q');
+        next.delete('page');
         return next;
       }, { replace: true });
     }, 400);
@@ -47,10 +53,13 @@ export default function ReportsList() {
       setLoading(true);
       setError('');
       try {
-        const params = {};
+        const params = { page, limit: PAGE_SIZE, sort, direction };
         Object.entries(filters).forEach(([key, value]) => { if (value) params[key] = value; });
         const res = await api.get('/reports', { params });
-        if (active) setReports(res.data);
+        if (active) {
+          setReports(res.data.data);
+          setTotal(res.data.total);
+        }
       } catch (err) {
         if (active) setError(err.response?.data?.error?.message || 'Reports could not be loaded.');
       } finally {
@@ -69,6 +78,7 @@ export default function ReportsList() {
       const next = new URLSearchParams(previous);
       if (value) next.set(key, value);
       else next.delete(key);
+      next.delete('page');
       return next;
     }, { replace: true });
   };
@@ -79,6 +89,32 @@ export default function ReportsList() {
   };
 
   const hasFilters = Object.values(filters).some(Boolean);
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const goToPage = (nextPage) => {
+    setSearchParams((previous) => {
+      const params = new URLSearchParams(previous);
+      if (nextPage <= 1) params.delete('page');
+      else params.set('page', String(nextPage));
+      return params;
+    }, { replace: true });
+  };
+
+  const setSort = (value) => {
+    const [nextSort, nextDirection] = value.split(':');
+    setSearchParams((previous) => {
+      const params = new URLSearchParams(previous);
+      if (nextSort === 'created_at' && nextDirection === 'desc') {
+        params.delete('sort');
+        params.delete('direction');
+      } else {
+        params.set('sort', nextSort);
+        params.set('direction', nextDirection);
+      }
+      params.delete('page');
+      return params;
+    }, { replace: true });
+  };
 
   // CSV is fetched with the auth header and saved as a blob so the token never
   // appears in a URL. The selected filters and scope are sent along, so the file
@@ -140,6 +176,17 @@ export default function ReportsList() {
             <label htmlFor="filter-search">Search</label>
             <input id="filter-search" type="search" placeholder="Reference, title or location" value={searchText} onChange={e => setSearchText(e.target.value)} />
           </div>
+          <div className="form-group">
+            <label htmlFor="filter-sort">Sort by</label>
+            <select id="filter-sort" value={`${sort}:${direction}`} onChange={e => setSort(e.target.value)}>
+              <option value="created_at:desc">Newest first</option>
+              <option value="created_at:asc">Oldest first</option>
+              <option value="accident_date:desc">Accident date (newest)</option>
+              <option value="accident_date:asc">Accident date (oldest)</option>
+              <option value="report_reference:asc">Reference (A–Z)</option>
+              <option value="status:asc">Status</option>
+            </select>
+          </div>
           <div className="form-group filter-actions">
             <button type="button" className="btn btn-secondary" onClick={clearFilters} disabled={!hasFilters && !searchText}>
               Clear filters
@@ -171,11 +218,13 @@ export default function ReportsList() {
           <div>Loading...</div>
         ) : reports.length === 0 ? (
           <p style={{ color: 'hsl(var(--text-3))' }}>
-            {hasFilters ? 'No reports match the selected filters.' : 'No reports found.'}
+            {total > 0
+              ? 'No reports on this page.'
+              : hasFilters ? 'No reports match the selected filters.' : 'No reports found.'}
           </p>
         ) : (
           <>
-            <p className="muted" style={{ marginBottom: '0.5rem' }}>{reports.length} report{reports.length === 1 ? '' : 's'}</p>
+            <p className="muted" style={{ marginBottom: '0.5rem' }}>{total} report{total === 1 ? '' : 's'}</p>
             <table className="table">
               <thead>
                 <tr>
@@ -204,6 +253,11 @@ export default function ReportsList() {
                 ))}
               </tbody>
             </table>
+            <div className="pager">
+              <button type="button" className="btn btn-secondary" onClick={() => goToPage(page - 1)} disabled={page <= 1}>Previous</button>
+              <span>Page {page} of {pageCount}</span>
+              <button type="button" className="btn btn-secondary" onClick={() => goToPage(page + 1)} disabled={page >= pageCount}>Next</button>
+            </div>
           </>
         )}
       </div>

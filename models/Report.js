@@ -93,6 +93,12 @@ export const Report = {
     const [rows] = await pool.query(query, params);
     return rows;
   },
+  async listPage(user, filters) {
+    const { query, params, countQuery, countParams } = buildReportQuery(user, filters);
+    const [[{ total }]] = await pool.query(countQuery, countParams);
+    const [rows] = await pool.query(query, params);
+    return { data: rows, total, page: filters.page, limit: filters.limit };
+  },
   async update(id, data, user) {
     const fields = [];
     const params = [];
@@ -141,8 +147,19 @@ export const Report = {
   }
 };
 
+// Sorting is mapped through this whitelist; request values never reach the SQL string.
+const SORT_COLUMNS = {
+  created_at: 'r.created_at',
+  accident_date: 'r.accident_date',
+  status: 'r.status',
+  report_reference: 'r.report_reference'
+};
+
 function buildReportQuery(user, filters = {}) {
-  const { status = null, categoryId = null, dateFrom = null, dateTo = null, search = null } = filters;
+  const {
+    status = null, categoryId = null, dateFrom = null, dateTo = null, search = null,
+    sort = 'created_at', direction = 'desc', page = null, limit = null
+  } = filters;
   // Every condition goes into WHERE. Officers see only reports assigned to them.
   const conditions = [];
   const params = [];
@@ -174,14 +191,21 @@ function buildReportQuery(user, filters = {}) {
     conditions.push('(r.title LIKE ? OR r.location LIKE ? OR r.report_reference LIKE ?)');
     params.push(like, like, like);
   }
+  const where = conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
+  const orderColumn = SORT_COLUMNS[sort] || SORT_COLUMNS.created_at;
+  const orderDirection = String(direction).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   let query = `
     SELECT r.*, u.name as reporter_name, u.email as reporter_email,
            ac.name as category_name
     FROM reports r
     JOIN users u ON r.reporter_id = u.id
     LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
-  `;
-  if (conditions.length > 0) query += ' WHERE ' + conditions.join(' AND ');
-  query += ' ORDER BY r.created_at DESC';
-  return { query, params };
+  ${where} ORDER BY ${orderColumn} ${orderDirection}`;
+  const queryParams = [...params];
+  if (page && limit) {
+    query += ' LIMIT ? OFFSET ?';
+    queryParams.push(limit, (page - 1) * limit);
+  }
+  const countQuery = `SELECT COUNT(*) AS total FROM reports r${where}`;
+  return { query, params: queryParams, countQuery, countParams: params };
 }
