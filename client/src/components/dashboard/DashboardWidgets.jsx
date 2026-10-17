@@ -163,12 +163,14 @@ export function VehicleStrip({ data }) {
   );
 }
 
-export function NeedsAttentionTable({ rows }) {
+// Serves both the waiting queue and the recent-submissions list; the waiting
+// column only makes sense for the former.
+export function NeedsAttentionTable({ rows, recent = false }) {
   const days = (d) => Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000));
   return (
     <div className="ad-scroll">
       <table className="ad-tbl">
-        <thead><tr><th>Reference</th><th>Type</th><th>Location</th><th>Status</th><th>Submitted</th><th>Waiting</th></tr></thead>
+        <thead><tr><th>Reference</th><th>Type</th><th>Location</th><th>Status</th><th>Submitted</th>{!recent && <th>Waiting</th>}</tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.id}>
@@ -177,7 +179,7 @@ export function NeedsAttentionTable({ rows }) {
               <td>{r.location}</td>
               <td><span className={`badge badge-${r.status}`}>{label(r.status)}</span></td>
               <td>{new Date(r.created_at).toLocaleDateString()}</td>
-              <td>{days(r.created_at)}d</td>
+              {!recent && <td>{days(r.created_at)}d</td>}
             </tr>
           ))}
         </tbody>

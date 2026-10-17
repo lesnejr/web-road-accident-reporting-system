@@ -164,6 +164,15 @@ router.get('/dashboard/stats', async (req, res, next) => {
       ORDER BY r.created_at ASC
       LIMIT 8
     `, filterParams);
+    // Latest submissions of the selected year, honouring the type/location filters.
+    const [recent] = await pool.query(`
+      SELECT r.id, r.report_reference, r.title, r.status, r.location, r.created_at, ac.name AS category_name
+      FROM reports r
+      LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
+      WHERE r.created_at >= ? AND r.created_at < ? ${filter}
+      ORDER BY r.created_at DESC
+      LIMIT 8
+    `, [`${year}-01-01`, `${year + 1}-01-01`, ...filterParams]);
     const [yearRows] = await pool.query('SELECT DISTINCT YEAR(created_at) AS y FROM reports ORDER BY y DESC');
 
     res.json({
@@ -182,7 +191,8 @@ router.get('/dashboard/stats', async (req, res, next) => {
           status: r.status, accident_date: r.accident_date, accident_time: r.accident_time,
           location: r.location, _type: isOfficial(r) ? 'verified' : 'unverified'
         })),
-      needsAttention: attention
+      needsAttention: attention,
+      recent
     });
   } catch (err) { next(err); }
 });

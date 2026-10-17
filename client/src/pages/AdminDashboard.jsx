@@ -138,6 +138,12 @@ export default function AdminDashboard() {
             </WidgetState>
           </Card>
 
+          <Card area="rc" title="Recent submissions">
+            <WidgetState {...st} empty={!data?.recent?.length} emptyText="No reports match these filters">
+              <NeedsAttentionTable rows={data?.recent || []} recent />
+            </WidgetState>
+          </Card>
+
           <Card area="df">
             <div className="ad-df">
               <b>How numbers are counted.</b> Each report is counted in the month it was submitted. <b>Total Submitted</b> = all reports.
