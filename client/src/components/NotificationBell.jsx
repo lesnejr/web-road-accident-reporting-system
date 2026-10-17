@@ -8,13 +8,16 @@ export default function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const fetchCount = async () => {
     try {
       const res = await api.get('/notifications/unread-count');
       setCount(res.data.count);
+      setError('');
     } catch (err) {
       console.error(err);
+      setError('The unread count could not be refreshed.');
     }
   };
 
@@ -23,8 +26,10 @@ export default function NotificationBell() {
     try {
       const res = await api.get('/notifications', { params: { limit: 10 } });
       setNotifications(res.data.rows);
+      setError('');
     } catch (err) {
       console.error(err);
+      setError('Notifications could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -44,9 +49,11 @@ export default function NotificationBell() {
     try {
       await api.post(`/notifications/${id}/read`);
       setNotifications(n => n.map(notif => notif.id === id ? { ...notif, is_read: 1 } : notif));
+      setError('');
       fetchCount();
     } catch (err) {
       console.error(err);
+      setError('The notification could not be marked as read.');
     }
   };
 
@@ -54,9 +61,11 @@ export default function NotificationBell() {
     try {
       await api.post('/notifications/read-all');
       setNotifications(n => n.map(notif => ({ ...notif, is_read: 1 })));
+      setError('');
       fetchCount();
     } catch (err) {
       console.error(err);
+      setError('The notifications could not be marked as read.');
     }
   };
 
@@ -88,10 +97,13 @@ export default function NotificationBell() {
               <h3 style={{ margin: 0 }}>Notifications</h3>
               {count > 0 && <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }} onClick={handleReadAll}>Mark all read</button>}
             </div>
+            {error && (
+              <p role="alert" style={{ color: 'hsl(var(--level-severe))', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{error}</p>
+            )}
             {loading ? (
               <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div>
             ) : notifications.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: 'hsl(var(--text-3))' }}>No notifications</div>
+              error ? null : <div style={{ textAlign: 'center', padding: '2rem', color: 'hsl(var(--text-3))' }}>No notifications</div>
             ) : (
               <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                 {notifications.map(n => (

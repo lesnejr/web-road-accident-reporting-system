@@ -5,10 +5,12 @@ export default function AdminAuditLogs() {
   const [data, setData] = useState({ rows: [], total: 0, page: 1, limit: 50 });
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [error, setError] = useState('');
   const [filters, setFilters] = useState({ userId: '', action: '', entityType: '' });
 
   const load = async () => {
     setLoading(true);
+    setError('');
     try {
       const params = { page, limit: 50, ...filters };
       Object.keys(params).forEach(k => params[k] === '' && delete params[k]);
@@ -16,6 +18,7 @@ export default function AdminAuditLogs() {
       setData(res.data);
     } catch (err) {
       console.error(err);
+      setError(err.response?.data?.error?.message || 'Audit logs could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -37,20 +40,20 @@ export default function AdminAuditLogs() {
       </div>
 
       <div className="card">
-        {loading ? <div>Loading...</div> : data.rows.length === 0 ? <p style={{ color: 'hsl(var(--text-3))' }}>No audit logs.</p> : (
+        {loading ? <div>Loading...</div> : error ? <div className="alert alert-error" role="alert">{error}</div> : data.rows.length === 0 ? <p style={{ color: 'hsl(var(--text-3))' }}>No audit logs.</p> : (
           <>
             <table className="table">
               <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Entity</th><th>Entity ID</th><th>IP</th><th>Details</th></tr></thead>
               <tbody>
                 {data.rows.map(log => (
                   <tr key={log.id}>
-                    <td>{new Date(log.created_at).toLocaleString()}</td>
-                    <td>{log.user_name || log.user_email || 'System'}</td>
-                    <td><span className="badge badge-verified">{log.action}</span></td>
-                    <td>{log.entity_type}</td>
-                    <td>{log.entity_id || '-'}</td>
-                    <td>{log.ip_address || '-'}</td>
-                    <td><pre style={{ fontSize: '0.75rem', maxHeight: '100px', overflow: 'auto' }}>{log.details ? JSON.stringify(log.details, null, 2) : ''}</pre></td>
+                    <td data-label="Time">{new Date(log.created_at).toLocaleString()}</td>
+                    <td data-label="User">{log.user_name || log.user_email || 'System'}</td>
+                    <td data-label="Action"><span className="badge badge-verified">{log.action}</span></td>
+                    <td data-label="Entity">{log.entity_type}</td>
+                    <td data-label="Entity ID">{log.entity_id || '-'}</td>
+                    <td data-label="IP">{log.ip_address || '-'}</td>
+                    <td data-label="Details"><pre style={{ fontSize: '0.75rem', maxHeight: '100px', overflow: 'auto' }}>{log.details ? JSON.stringify(log.details, null, 2) : ''}</pre></td>
                   </tr>
                 ))}
               </tbody>

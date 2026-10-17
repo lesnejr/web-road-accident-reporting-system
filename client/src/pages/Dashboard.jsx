@@ -8,13 +8,17 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [recent, setRecent] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     // Admins see the full dashboard below, so they need no report list here.
     if (user.role === 'admin') return;
     api.get('/reports')
       .then(res => setRecent(res.data.slice(0, 5)))
-      .catch(err => console.error(err))
+      .catch(err => {
+        console.error(err);
+        setError('Your recent reports could not be loaded.');
+      })
       .finally(() => setLoading(false));
   }, [user]);
 
@@ -33,7 +37,9 @@ export default function Dashboard() {
           <h3>Recent Reports</h3>
           <Link to="/reports" className="btn btn-secondary">View All</Link>
         </div>
-        {recent.length === 0 ? (
+        {error ? (
+          <div className="alert alert-error" role="alert">{error}</div>
+        ) : recent.length === 0 ? (
           <p style={{ color: 'hsl(var(--text-3))' }}>No reports yet.</p>
         ) : (
           <table className="table">
@@ -49,11 +55,11 @@ export default function Dashboard() {
             <tbody>
               {recent.map(r => (
                 <tr key={r.id}>
-                  <td>{r.report_reference}</td>
-                  <td><Link to={`/reports/${r.id}`}>{r.title}</Link></td>
-                  <td>{r.location}</td>
-                  <td><span className={`badge badge-${r.status}`}>{r.status.replace('_', ' ')}</span></td>
-                  <td>{new Date(r.created_at).toLocaleDateString()}</td>
+                  <td data-label="Reference">{r.report_reference}</td>
+                  <td data-label="Title"><Link to={`/reports/${r.id}`}>{r.title}</Link></td>
+                  <td data-label="Location">{r.location}</td>
+                  <td data-label="Status"><span className={`badge badge-${r.status}`}>{r.status.replace('_', ' ')}</span></td>
+                  <td data-label="Date">{new Date(r.created_at).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>

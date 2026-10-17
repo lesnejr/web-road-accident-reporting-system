@@ -25,6 +25,7 @@ export default function ReportDetail() {
   const [action, setAction] = useState(null);
   const [actionText, setActionText] = useState('');
   const [officers, setOfficers] = useState([]);
+  const [officersFailed, setOfficersFailed] = useState(false);
   const [assignTo, setAssignTo] = useState('');
   const [pendingFile, setPendingFile] = useState(null);
   const [fileDesc, setFileDesc] = useState('');
@@ -54,7 +55,7 @@ export default function ReportDetail() {
     if (user.role !== 'admin') return;
     api.get('/users', { params: { role: 'traffic_officer', is_active: 1 } })
       .then(res => setOfficers(res.data))
-      .catch(() => {});
+      .catch(() => setOfficersFailed(true));
   }, [user.role]);
 
   // Duplicate candidates load for admins only. When the report is already
@@ -329,7 +330,9 @@ export default function ReportDetail() {
           {action?.type === 'assign' && (
             <div className="action-panel">
               <label htmlFor="assign-officer">Assign to traffic officer</label>
-              {officers.length === 0 ? (
+              {officersFailed ? (
+                <p className="muted" role="alert">The officer list could not be loaded, so assignment is unavailable here.</p>
+              ) : officers.length === 0 ? (
                 <p className="muted">No active traffic officers found. Create one in User Management first.</p>
               ) : (
                 <select id="assign-officer" value={assignTo} onChange={e => setAssignTo(e.target.value)}>
@@ -449,11 +452,11 @@ export default function ReportDetail() {
             <tbody>
               {history.map(h => (
                 <tr key={h.id}>
-                  <td>{h.old_status ? h.old_status.replace(/_/g, ' ') : '-'}</td>
-                  <td><span className={`badge badge-${h.new_status}`}>{h.new_status.replace(/_/g, ' ')}</span></td>
-                  <td>{h.changed_by_name}</td>
-                  <td>{h.reason || '-'}</td>
-                  <td>{new Date(h.changed_at).toLocaleString()}</td>
+                  <td data-label="From">{h.old_status ? h.old_status.replace(/_/g, ' ') : '-'}</td>
+                  <td data-label="To"><span className={`badge badge-${h.new_status}`}>{h.new_status.replace(/_/g, ' ')}</span></td>
+                  <td data-label="By">{h.changed_by_name}</td>
+                  <td data-label="Reason">{h.reason || '-'}</td>
+                  <td data-label="Date">{new Date(h.changed_at).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>

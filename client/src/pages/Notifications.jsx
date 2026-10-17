@@ -8,14 +8,17 @@ export default function Notifications() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [error, setError] = useState('');
 
   const fetch = async () => {
     setLoading(true);
+    setError('');
     try {
       const res = await api.get('/notifications', { params: { page, limit: 20, unread: unreadOnly } });
       setData(res.data);
     } catch (err) {
       console.error(err);
+      setError('Notifications could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -27,8 +30,10 @@ export default function Notifications() {
     try {
       await api.post(`/notifications/${id}/read`);
       setData(d => ({ ...d, rows: d.rows.map(n => n.id === id ? { ...n, is_read: 1 } : n) }));
+      setError('');
     } catch (err) {
       console.error(err);
+      setError('The notification could not be marked as read.');
     }
   };
 
@@ -36,8 +41,10 @@ export default function Notifications() {
     try {
       await api.post('/notifications/read-all');
       setData(d => ({ ...d, rows: d.rows.map(n => ({ ...n, is_read: 1 })) }));
+      setError('');
     } catch (err) {
       console.error(err);
+      setError('The notifications could not be marked as read.');
     }
   };
 
@@ -54,9 +61,11 @@ export default function Notifications() {
         </div>
       </div>
 
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
+
       <div className="card">
         {loading ? <div>Loading...</div> : data.rows.length === 0 ? (
-          <p style={{ color: 'hsl(var(--text-3))', textAlign: 'center', padding: '2rem' }}>No notifications</p>
+          error ? null : <p style={{ color: 'hsl(var(--text-3))', textAlign: 'center', padding: '2rem' }}>No notifications</p>
         ) : (
           <>
             <div style={{ maxHeight: '500px', overflowY: 'auto' }}>

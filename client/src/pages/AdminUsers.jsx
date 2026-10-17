@@ -177,17 +177,17 @@ export default function AdminUsers() {
             <tbody>
               {users.map(u => (
                 <tr key={u.id}>
-                  <td>{u.name}{u.id === currentUser.id ? ' (you)' : ''}</td>
-                  <td>{u.email}</td>
-                  <td>
+                  <td data-label="Name">{u.name}{u.id === currentUser.id ? ' (you)' : ''}</td>
+                  <td data-label="Email">{u.email}</td>
+                  <td data-label="Role">
                     <select value={u.role} onChange={e => changeRole(u, e.target.value)} disabled={busyId === u.id || u.id === currentUser.id} aria-label={`Role of ${u.name}`}>
                       {ROLES.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
                     </select>
                   </td>
-                  <td>{u.phone || '-'}</td>
-                  <td><span className={`badge badge-${u.is_active ? 'resolved' : 'rejected'}`}>{u.is_active ? 'Active' : 'Inactive'}</span></td>
-                  <td>{new Date(u.created_at).toLocaleDateString()}</td>
-                  <td>
+                  <td data-label="Phone">{u.phone || '-'}</td>
+                  <td data-label="Status"><span className={`badge badge-${u.is_active ? 'resolved' : 'rejected'}`}>{u.is_active ? 'Active' : 'Inactive'}</span></td>
+                  <td data-label="Created">{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td data-label="Actions">
                     <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
                       onClick={() => toggleActive(u)} disabled={busyId === u.id || u.id === currentUser.id}>
                       {u.is_active ? 'Deactivate' : 'Activate'}

@@ -71,7 +71,9 @@ export default function ReportForm() {
   };
 
   useEffect(() => {
-    api.get('/accident-categories').then(res => setCategories(res.data)).catch(() => {});
+    api.get('/accident-categories')
+      .then(res => setCategories(res.data))
+      .catch(() => setCategoriesError(true));
   }, []);
 
   useEffect(() => {
@@ -138,6 +140,7 @@ export default function ReportForm() {
                 <option value="">Select...</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+              {categoriesError && <p className="muted" role="alert">Categories could not be loaded. Reload the page before submitting.</p>}
             </div>
           </div>
           <div className="form-group">

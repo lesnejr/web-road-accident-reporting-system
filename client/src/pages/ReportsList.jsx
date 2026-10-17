@@ -10,6 +10,7 @@ export default function ReportsList() {
   const [reports, setReports] = useState([]);
   const [total, setTotal] = useState(0);
   const [categories, setCategories] = useState([]);
+  const [categoriesError, setCategoriesError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -44,7 +45,7 @@ export default function ReportsList() {
   }, [searchText, setSearchParams]);
 
   useEffect(() => {
-    api.get('/accident-categories').then(res => setCategories(res.data)).catch(() => {});
+    api.get('/accident-categories').then(res => setCategories(res.data)).catch(() => setCategoriesError(true));
   }, []);
 
   useEffect(() => {
@@ -163,6 +164,7 @@ export default function ReportsList() {
               <option value="">All types</option>
               {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+            {categoriesError && <p className="muted" role="alert">Accident types could not be loaded, so this filter is limited.</p>}
           </div>
           <div className="form-group">
             <label htmlFor="filter-from">Accident date from</label>
@@ -240,13 +242,13 @@ export default function ReportsList() {
               <tbody>
                 {reports.map(r => (
                   <tr key={r.id}>
-                    <td>{r.report_reference}</td>
-                    <td><Link to={`/reports/${r.id}`}>{r.title}</Link></td>
-                    <td>{r.location}</td>
-                    <td>{r.category_name || '-'}</td>
-                    <td><span className={`badge badge-${r.status}`}>{r.status.replace(/_/g, ' ')}</span></td>
-                    <td>{new Date(r.created_at).toLocaleDateString()}</td>
-                    <td>
+                    <td data-label="Reference">{r.report_reference}</td>
+                    <td data-label="Title"><Link to={`/reports/${r.id}`}>{r.title}</Link></td>
+                    <td data-label="Location">{r.location}</td>
+                    <td data-label="Category">{r.category_name || '-'}</td>
+                    <td data-label="Status"><span className={`badge badge-${r.status}`}>{r.status.replace(/_/g, ' ')}</span></td>
+                    <td data-label="Date">{new Date(r.created_at).toLocaleDateString()}</td>
+                    <td data-label="Actions">
                       <Link to={`/reports/${r.id}`} className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}>View</Link>
                     </td>
                   </tr>

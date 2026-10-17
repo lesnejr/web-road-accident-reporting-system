@@ -342,7 +342,7 @@ label {
 
 .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
 
-.pager { display: flex; align-items: center; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
+.pager { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
 
 .duplicate-list { list-style: none; margin: 0; padding: 0; }
 .duplicate-list li { display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid hsl(var(--line) / var(--line-alpha)); flex-wrap: wrap; }
@@ -1063,4 +1063,28 @@ main.container:has(.ops-page) { max-width: none; padding: 0; display: flex; }
   .container { padding: 1.25rem 0.85rem 2.5rem; }
   .navbar { padding: 0.6rem 0.85rem; }
   .page-title h1 { font-size: 1.25rem; }
+}
+
+/* Nav links keep the layout the inline style used to provide. */
+.navbar-links { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; }
+
+/* Phones: tighter nav, centred pager, and tables that stack into labelled cards.
+   Only tables whose cells carry a data-label degrade here; wide numeric tables
+   (summaries) keep their horizontal scroll via .card:has(.table). */
+@media (max-width: 640px) {
+  .navbar-links { gap: 0.5rem 0.75rem; }
+  .pager { justify-content: center; }
+  .table:has(td[data-label]) thead { display: none; }
+  .table:has(td[data-label]) tbody, .table:has(td[data-label]) tr, .table:has(td[data-label]) td { display: block; width: 100%; }
+  .table:has(td[data-label]) tr { padding: 0.5rem 0; border-bottom: 1px solid hsl(var(--line) / var(--line-alpha)); }
+  .table:has(td[data-label]) tr:last-child { border-bottom: none; }
+  .table:has(td[data-label]) td { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 0.3rem 0.8rem; border-bottom: none; }
+  .table:has(td[data-label]) td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: hsl(var(--text-3));
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
 }

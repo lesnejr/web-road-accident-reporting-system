@@ -25,7 +25,7 @@ export default function Layout() {
     <div className="app-shell">
       <nav className="navbar">
         <div><strong>Road Accident Reporting</strong></div>
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div className="navbar-links">
           {visibleNav.map(item => (
             <NavLink key={item.to} to={item.to} className={({ isActive }) => isActive ? 'active' : ''}>
               {item.label}

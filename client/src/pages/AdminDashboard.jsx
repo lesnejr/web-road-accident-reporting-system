@@ -22,6 +22,7 @@ export default function AdminDashboard() {
   const [filters, setFilters] = useState({ year: THIS_YEAR, compareYear: THIS_YEAR - 1, scope: 'verified', typeId: '', location: '' });
   const [location, setLocation] = useState('');
   const [categories, setCategories] = useState([]);
+  const [categoriesFailed, setCategoriesFailed] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -34,7 +35,9 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (USE_MOCK) return;
-    api.get('/accident-categories').then((r) => setCategories(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    api.get('/accident-categories')
+      .then((r) => setCategories(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setCategoriesFailed(true));
   }, []);
 
   const { year, compareYear, scope, typeId } = filters;
@@ -74,6 +77,11 @@ export default function AdminDashboard() {
               </div>
             </div>
             <DashboardFilters filters={filters} years={years} categories={categories} onChange={setFilters} />
+            {categoriesFailed && (
+              <p role="alert" className="ad-sub" style={{ marginTop: '0.25rem' }}>
+                Accident types could not be loaded, so the type filter is limited.
+              </p>
+            )}
           </header>
 
           <div className="ad-kp">
