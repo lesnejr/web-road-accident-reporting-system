@@ -34,6 +34,7 @@ The first session had built and hardened most of the system but left a working t
 | W4 UI states | Task 13 | `cddabd1` | Tables degrade to labelled cards ≤640 px (`data-label` + `:has`), nav/pager small-screen tweaks, every client `catch` now renders an error state or flag except two documented best-effort cases |
 | W6 docs | Task 15 | `44426f3` | README full pass, evidence-backed requirements matrix, this report |
 | Review | post-review fix pass | `62e14cb` | Whole-branch review by a fresh-context subagent; fixed: undeclared `categoriesError` state in ReportForm (UI crash on the report form), Modal focus/Esc during busy, PDF stream error handling, dashboard stale-data banner, dead `buildReportQuery` export, README pagination wording |
+| User testing | live browser pass | `0c05ae0` | User testing found the admin/officer action panels offered illegal transitions (e.g. Assign Officer on a submitted report → server 409, which is the designed rule). Panels now render only the actions legal from the current status. |
 
 ## 3. Files added and changed
 
