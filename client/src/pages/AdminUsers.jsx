@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { ConfirmDialog } from '../components/Modal';
 import api from '../services/api';
 
 const ROLES = [
@@ -21,6 +22,8 @@ export default function AdminUsers() {
   const [account, setAccount] = useState(emptyAccount);
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [confirmState, setConfirmState] = useState(null);
+  const [busyConfirm, setBusyConfirm] = useState(false);
 
   const load = async () => {
     const params = {};
@@ -56,38 +59,58 @@ export default function AdminUsers() {
     }
   };
 
-  const changeRole = async (target, role) => {
+  const changeRole = (target, role) => {
     if (role === target.role) return;
-    if (!window.confirm(`Change ${target.name}'s role from ${target.role.replace(/_/g, ' ')} to ${role.replace(/_/g, ' ')}?`)) return;
-    setBusyId(target.id);
-    setError('');
-    setNotice('');
-    try {
-      await api.patch(`/users/${target.id}/role`, { role });
-      setUsers(users.map(u => (u.id === target.id ? { ...u, role } : u)));
-      setNotice(`Role updated for ${target.email}.`);
-    } catch (err) {
-      setError(err.response?.data?.error?.message || 'The role could not be changed.');
-    } finally {
-      setBusyId(null);
-    }
+    setConfirmState({
+      title: 'Change role',
+      message: `Change ${target.name}'s role from ${target.role.replace(/_/g, ' ')} to ${role.replace(/_/g, ' ')}?`,
+      confirmLabel: 'Change role',
+      run: async () => {
+        setBusyId(target.id);
+        setError('');
+        setNotice('');
+        try {
+          await api.patch(`/users/${target.id}/role`, { role });
+          setUsers(users.map(u => (u.id === target.id ? { ...u, role } : u)));
+          setNotice(`Role updated for ${target.email}.`);
+        } catch (err) {
+          setError(err.response?.data?.error?.message || 'The role could not be changed.');
+        } finally {
+          setBusyId(null);
+        }
+      }
+    });
   };
 
-  const toggleActive = async (target) => {
+  const toggleActive = (target) => {
     const deactivating = Boolean(target.is_active);
-    if (deactivating && !window.confirm(`Deactivate ${target.name}? They will not be able to sign in until an admin reactivates the account.`)) return;
-    setBusyId(target.id);
-    setError('');
-    setNotice('');
-    try {
-      await api.patch(`/users/${target.id}`, { is_active: deactivating ? 0 : 1 });
-      setUsers(users.map(u => (u.id === target.id ? { ...u, is_active: deactivating ? 0 : 1 } : u)));
-      setNotice(`${target.name} is now ${deactivating ? 'inactive' : 'active'}.`);
-    } catch (err) {
-      setError(err.response?.data?.error?.message || 'The account could not be updated.');
-    } finally {
-      setBusyId(null);
-    }
+    const run = async () => {
+      setBusyId(target.id);
+      setError('');
+      setNotice('');
+      try {
+        await api.patch(`/users/${target.id}`, { is_active: deactivating ? 0 : 1 });
+        setUsers(users.map(u => (u.id === target.id ? { ...u, is_active: deactivating ? 0 : 1 } : u)));
+        setNotice(`${target.name} is now ${deactivating ? 'inactive' : 'active'}.`);
+      } catch (err) {
+        setError(err.response?.data?.error?.message || 'The account could not be updated.');
+      } finally {
+        setBusyId(null);
+      }
+    };
+    if (!deactivating) { run(); return; }
+    setConfirmState({
+      title: 'Deactivate account',
+      message: `Deactivate ${target.name}? They will not be able to sign in until an admin reactivates the account.`,
+      confirmLabel: 'Deactivate',
+      run
+    });
+  };
+
+  const runConfirmed = async () => {
+    if (!confirmState) return;
+    setBusyConfirm(true);
+    try { await confirmState.run(); } finally { setBusyConfirm(false); setConfirmState(null); }
   };
 
   if (loading) return <div className="container">Loading...</div>;
@@ -176,6 +199,16 @@ export default function AdminUsers() {
           </table>
         )}
       </div>
+
+      <ConfirmDialog
+        open={Boolean(confirmState)}
+        title={confirmState?.title}
+        message={confirmState?.message}
+        confirmLabel={confirmState?.confirmLabel}
+        busy={busyConfirm}
+        onConfirm={runConfirmed}
+        onCancel={() => setConfirmState(null)}
+      />
     </div>
   );
 }
