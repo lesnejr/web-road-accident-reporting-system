@@ -1,20 +1,25 @@
 ﻿import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 export default function NotificationBell() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [count, setCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const fetchCount = async () => {
     try {
       const res = await api.get('/notifications/unread-count');
       setCount(res.data.count);
+      setError('');
     } catch (err) {
       console.error(err);
+      setError('The unread count could not be refreshed.');
     }
   };
 
@@ -23,8 +28,10 @@ export default function NotificationBell() {
     try {
       const res = await api.get('/notifications', { params: { limit: 10 } });
       setNotifications(res.data.rows);
+      setError('');
     } catch (err) {
       console.error(err);
+      setError('Notifications could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -40,13 +47,23 @@ export default function NotificationBell() {
     if (open) fetchNotifications();
   }, [open]);
 
+  // Escape closes the bell panel, like every other dialog in the app.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open]);
+
   const handleRead = async (id) => {
     try {
       await api.post(`/notifications/${id}/read`);
       setNotifications(n => n.map(notif => notif.id === id ? { ...notif, is_read: 1 } : notif));
+      setError('');
       fetchCount();
     } catch (err) {
       console.error(err);
+      setError('The notification could not be marked as read.');
     }
   };
 
@@ -54,9 +71,11 @@ export default function NotificationBell() {
     try {
       await api.post('/notifications/read-all');
       setNotifications(n => n.map(notif => ({ ...notif, is_read: 1 })));
+      setError('');
       fetchCount();
     } catch (err) {
       console.error(err);
+      setError('The notifications could not be marked as read.');
     }
   };
 
@@ -83,22 +102,39 @@ export default function NotificationBell() {
 
       {open && (
         <div className="modal-overlay" onClick={() => setOpen(false)}>
-          <div className="modal" style={{ maxWidth: '400px', width: '95%' }} onClick={e => e.stopPropagation()}>
+          <div className="modal" role="dialog" aria-label="Notifications" style={{ maxWidth: '400px', width: '95%' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ margin: 0 }}>Notifications</h3>
-              {count > 0 && <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }} onClick={handleReadAll}>Mark all read</button>}
+              {count > 0 && <button className="btn btn-secondary btn-sm" onClick={handleReadAll}>Mark all read</button>}
             </div>
+            {error && (
+              <p role="alert" style={{ color: 'hsl(var(--level-severe))', fontSize: '0.875rem', marginBottom: '0.5rem' }}>{error}</p>
+            )}
             {loading ? (
               <div style={{ textAlign: 'center', padding: '2rem' }}>Loading...</div>
             ) : notifications.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: 'hsl(var(--text-3))' }}>No notifications</div>
+              error ? null : <div style={{ textAlign: 'center', padding: '2rem', color: 'hsl(var(--text-3))' }}>No notifications</div>
             ) : (
               <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
                 {notifications.map(n => (
-                  <div key={n.id} style={{ padding: '0.75rem', borderBottom: '1px solid hsl(var(--line) / var(--line-alpha))', background: n.is_read ? 'transparent' : 'hsl(var(--accent) / 0.12)', cursor: 'pointer' }} onClick={() => !n.is_read && handleRead(n.id)}>
+                  <div key={n.id} style={{ padding: '0.75rem', borderBottom: '1px solid hsl(var(--line) / var(--line-alpha))', background: n.is_read ? 'transparent' : 'hsl(var(--accent) / 0.12)', cursor: 'pointer' }} onClick={() => {
+                    if (!n.is_read) handleRead(n.id);
+                    if (n.report_id) { setOpen(false); navigate(`/reports/${n.report_id}`); }
+                  }}>
                     <div style={{ fontWeight: n.is_read ? 'normal' : 'bold' }}>{n.message}</div>
                     <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-3))', marginTop: '0.25rem' }}>
                       {new Date(n.created_at).toLocaleString()}
+                      {n.report_id && (
+                        <>
+                          {' · '}
+                          <Link
+                            to={`/reports/${n.report_id}`}
+                            onClick={(e) => { e.stopPropagation(); setOpen(false); if (!n.is_read) handleRead(n.id); }}
+                          >
+                            Open report
+                          </Link>
+                        </>
+                      )}
                     </div>
                   </div>
                 ))}

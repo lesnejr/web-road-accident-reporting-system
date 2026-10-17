@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 
-// Dark is the default. The inline script in index.html applies the stored choice
+// Light is the default. The inline script in index.html applies the stored choice
 // before first paint, so this component only keeps the button in sync afterwards.
-const getTheme = () => (document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
+const getTheme = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
 
 export default function ThemeToggle() {
   const [theme, setTheme] = useState(getTheme);

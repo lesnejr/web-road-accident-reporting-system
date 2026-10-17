@@ -3,17 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#0B0F14" />
+    <meta name="theme-color" content="#0F1E3D" />
     <title>Road Accident Reporting System</title>
     <script>
-      // Apply the saved theme before first paint so a light page never flashes
-      // when dark was chosen. Dark is the default.
+      // Apply the saved theme before first paint so a dark page never flashes
+      // when light was chosen. Light is the default.
       (function () {
         try {
           document.documentElement.dataset.theme =
-            localStorage.getItem('theme') === 'light' ? 'light' : 'dark';
+            localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
         } catch (e) {
-          document.documentElement.dataset.theme = 'dark';
+          document.documentElement.dataset.theme = 'light';
         }
       })();
     </script>

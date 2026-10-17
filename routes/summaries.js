@@ -1,9 +1,85 @@
 import express from 'express';
+import PDFDocument from 'pdfkit';
 import pool from '../config/db.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { buildCsv } from '../utils/csv.js';
+import { exportHeaderLines } from '../utils/exportHeader.js';
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'));
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// ---- Export helpers -------------------------------------------------------------------
+// Simple monospace tables: fixed character columns in Courier keep rows aligned
+// without a table library. Long cells are trimmed to their column width with an
+// ellipsis marker; headers repeat after a page break. `state` carries the page
+// counter and writes the footer onto the page being left behind.
+function writePdfTable(doc, widths, header, rows, state) {
+  const fit = (cell, width) => {
+    const text = String(cell ?? '');
+    return text.length > width ? `${text.slice(0, width - 1)}…` : text;
+  };
+  const line = (cells) => cells.map((cell, i) => fit(cell, widths[i]).padEnd(widths[i])).join(' ');
+  const writeHeader = () => {
+    doc.font('Courier').fontSize(7.5).fillColor('#000000');
+    doc.text(line(header));
+  };
+  writeHeader();
+  if (rows.length === 0) {
+    doc.moveDown(0.5);
+    doc.font('Helvetica').fontSize(9).fillColor('#444444').text('No records match the applied filters.');
+    return;
+  }
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  for (const row of rows) {
+    if (doc.y + 10 > bottom) {
+      if (state) state.newPage();
+      else doc.addPage();
+      writeHeader();
+    }
+    doc.text(line(row));
+  }
+}
+
+function renderPdf(res, filename, title, headerLines, renderBody) {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  // An aborted download or a pdfkit failure must not surface as an unhandled
+  // stream error after the headers are already sent.
+  doc.on('error', (err) => res.destroy(err));
+  res.on('close', () => { if (!doc.destroyed) doc.destroy(); });
+  doc.pipe(res);
+  // Page numbers are tracked here because the document is streamed, not buffered.
+  const state = { page: 1 };
+  const footer = () => {
+    const y = doc.page.height - doc.page.margins.bottom + 8;
+    const savedY = doc.y;
+    doc.font('Helvetica').fontSize(7.5).fillColor('#666666')
+      .text(`Page ${state.page}`, doc.page.margins.left, y, { lineBreak: false });
+    doc.y = savedY;
+  };
+  state.newPage = () => { footer(); doc.addPage(); state.page += 1; };
+  doc.font('Helvetica-Bold').fontSize(13).fillColor('#111111').text(title);
+  doc.font('Helvetica').fontSize(8).fillColor('#666666').text(`Generated ${stampText(new Date())}`);
+  doc.moveDown(0.5);
+  for (const headerLine of headerLines) {
+    doc.font('Helvetica').fontSize(9).fillColor('#444444').text(headerLine.replace(/^#\s*/, ''));
+  }
+  doc.moveDown();
+  renderBody(doc, state);
+  footer();
+  doc.end();
+}
+
+// Dates from mysql2 arrive as Date objects; exports show them as written in the UI.
+const dayText = (value) => value instanceof Date
+  ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
+  : String(value ?? '');
+const stampText = (value) => value instanceof Date
+  ? `${dayText(value)} ${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`
+  : String(value ?? '');
 
 // Mount at /api/summaries
 
@@ -124,6 +200,15 @@ router.get('/dashboard/stats', async (req, res, next) => {
       ORDER BY r.created_at ASC
       LIMIT 8
     `, filterParams);
+    // Latest submissions of the selected year, honouring the type/location filters.
+    const [recent] = await pool.query(`
+      SELECT r.id, r.report_reference, r.title, r.status, r.location, r.created_at, ac.name AS category_name
+      FROM reports r
+      LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
+      WHERE r.created_at >= ? AND r.created_at < ? ${filter}
+      ORDER BY r.created_at DESC
+      LIMIT 8
+    `, [`${year}-01-01`, `${year + 1}-01-01`, ...filterParams]);
     const [yearRows] = await pool.query('SELECT DISTINCT YEAR(created_at) AS y FROM reports ORDER BY y DESC');
 
     res.json({
@@ -142,7 +227,8 @@ router.get('/dashboard/stats', async (req, res, next) => {
           status: r.status, accident_date: r.accident_date, accident_time: r.accident_time,
           location: r.location, _type: isOfficial(r) ? 'verified' : 'unverified'
         })),
-      needsAttention: attention
+      needsAttention: attention,
+      recent
     });
   } catch (err) { next(err); }
 });
@@ -162,11 +248,18 @@ router.get('/dashboard/map', async (req, res, next) => {
 
 router.get('/reports/summaries', async (req, res, next) => {
   try {
-    const { period = 'monthly', from, to } = req.query;
+    const { period = 'monthly', from, to, format } = req.query;
+    if (format && format !== 'json' && format !== 'pdf') {
+      return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'format=json or format=pdf required' } });
+    }
+    if ((from && !DATE_RE.test(String(from))) || (to && !DATE_RE.test(String(to)))) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'Dates must be written as YYYY-MM-DD' } });
+    }
     let dateFilter = '';
     const params = [];
     if (from) { dateFilter += ' AND r.created_at >= ?'; params.push(from); }
-    if (to) { dateFilter += ' AND r.created_at <= ?'; params.push(to); }
+    // `to` is inclusive of the whole end day, so a range ending "today" includes today.
+    if (to) { dateFilter += ' AND r.created_at < DATE_ADD(?, INTERVAL 1 DAY)'; params.push(to); }
 
     let groupBy = '';
     switch (period) {
@@ -193,16 +286,30 @@ router.get('/reports/summaries', async (req, res, next) => {
       LIMIT 50
     `, params);
 
+    if (format === 'pdf') {
+      const rangeText = from || to ? ` (${from || 'earliest'} to ${to || 'latest'}, submission date)` : '';
+      const headerLines = exportHeaderLines({ scope: 'all', period: `${period}${rangeText}` });
+      return renderPdf(res, `accident-summaries-${period}-${new Date().toISOString().slice(0, 10)}.pdf`, `Accident Summary Report (${period})`, headerLines, (doc, state) => {
+        writePdfTable(doc, [12, 6, 8, 9, 8, 8, 8, 8, 8, 8],
+          ['period', 'total', 'submittd', 'underrev', 'clarif', 'verified', 'assigned', 'inprog', 'resolved', 'rejected'],
+          rows.map(r => [r.period, r.count, r.submitted, r.under_review, r.needs_clarification, r.verified, r.assigned, r.in_progress, r.resolved, r.rejected]), state);
+      });
+    }
     res.json({ period, data: rows });
   } catch (err) { next(err); }
 });
 
 router.get('/reports/export', async (req, res, next) => {
   try {
-    if (req.query.format !== 'csv') return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'format=csv required' } });
-    if (req.user.role !== 'admin') return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin only' } });
+    const format = req.query.format;
+    if (format !== 'csv' && format !== 'pdf') {
+      return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'format=csv or format=pdf required' } });
+    }
 
-    const { status, category_id, date_from, date_to, verified } = req.query;
+    const { status, category_id, date_from, date_to, verified, q } = req.query;
+    if ((date_from && !DATE_RE.test(String(date_from))) || (date_to && !DATE_RE.test(String(date_to)))) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'Dates must be written as YYYY-MM-DD' } });
+    }
     // Verified official records only by default. verified=all adds public-submitted reports.
     const scope = verified === 'false' ? 'unverified' : verified === 'all' ? 'all' : 'verified';
     let query = `
@@ -220,23 +327,47 @@ router.get('/reports/export', async (req, res, next) => {
     if (category_id) { query += ' AND r.accident_category_id = ?'; params.push(category_id); }
     if (date_from) { query += ' AND r.accident_date >= ?'; params.push(date_from); }
     if (date_to) { query += ' AND r.accident_date <= ?'; params.push(date_to); }
+    if (q && String(q).trim()) {
+      const like = `%${String(q).trim().slice(0, 100)}%`;
+      query += ' AND (r.title LIKE ? OR r.location LIKE ? OR r.report_reference LIKE ?)';
+      params.push(like, like, like);
+    }
     if (scope === 'verified') { query += ' AND r.verified_at IS NOT NULL AND r.status != "rejected"'; }
     if (scope === 'unverified') { query += ' AND (r.verified_at IS NULL OR r.status = "rejected")'; }
     query += ' ORDER BY r.created_at DESC';
 
     const [reports] = await pool.query(query, params);
+
+    // CSV and PDF share one header block, so both files state the same scope and filters.
+    let categoryName = null;
+    if (category_id) {
+      const [categories] = await pool.query('SELECT name FROM accident_categories WHERE id = ?', [category_id]);
+      categoryName = categories[0]?.name || String(category_id);
+    }
+    const headerLines = exportHeaderLines({
+      scope,
+      filters: { status, category: categoryName, date_from, date_to, search: q && String(q).trim() }
+    });
+    const fileStem = `accident-reports-${scope}-${new Date().toISOString().slice(0, 10)}`;
+
+    if (format === 'pdf') {
+      return renderPdf(res, `${fileStem}.pdf`, 'Road Accident Reports', headerLines, (doc, state) => {
+        writePdfTable(doc, [14, 30, 10, 12, 26, 14],
+          ['reference', 'title', 'accident', 'status', 'location', 'category'],
+          reports.map(r => [r.report_reference, r.title, dayText(r.accident_date), r.status, r.location, r.category_name]), state);
+      });
+    }
+
     const headers = ['report_reference','title','description','accident_date','accident_time','location','vehicle_type','injury_status','severity','vehicles_involved','injuries','fatalities','status','reporter_name','reporter_email','category_name','created_at'];
-    const rows = reports.map(r => headers.map(h => r[h] ?? ''));
-    // Every export states its scope in the first row, so an unverified export can never be mistaken for official data.
-    const scopeLine = scope === 'all'
-      ? '# INCLUDES UNVERIFIED public-submitted reports, which are not official records'
-      : scope === 'unverified'
-        ? '# Unverified public-submitted reports only, not official records'
-        : '# Verified official records only';
-    const csv = [scopeLine, headers.join(','), ...rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','))].join('\n');
+    const rows = reports.map(r => headers.map(h => {
+      if (h === 'accident_date') return dayText(r[h]);
+      if (h === 'created_at') return stampText(r[h]);
+      return r[h] ?? '';
+    }));
+    const csv = buildCsv([...headerLines.map((line) => [line]), headers, ...rows]);
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="accident-reports-${scope}-${new Date().toISOString().slice(0,10)}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileStem}.csv"`);
     res.send(csv);
   } catch (err) { next(err); }
 });

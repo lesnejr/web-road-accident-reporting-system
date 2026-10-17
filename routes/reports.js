@@ -9,11 +9,19 @@ import { StatusHistory } from '../models/StatusHistory.js';
 import { Notification } from '../models/Notification.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { logAudit } from '../utils/helpers.js';
+import { detectFileType, sanitizeFileName } from '../utils/fileType.js';
+import { findDuplicateCandidates } from '../utils/duplicates.js';
 
 const router = express.Router();
-const upload = multer({ dest: 'uploads/', limits: { fileSize: 10 * 1024 * 1024 } });
+const UPLOAD_ROOT = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
+const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
+const upload = multer({ dest: UPLOAD_ROOT, limits: { fileSize: MAX_EVIDENCE_BYTES } });
 
 router.use(requireAuth);
+
+const STATUSES = ['submitted', 'under_review', 'needs_clarification', 'verified', 'assigned', 'in_progress', 'resolved', 'rejected'];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SORTABLE = ['created_at', 'accident_date', 'status', 'report_reference'];
 
 router.post('/', requireRole('reporter', 'admin'), async (req, res, next) => {
   try {
@@ -31,8 +39,53 @@ router.post('/', requireRole('reporter', 'admin'), async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const status = req.query.status || null;
-    const reports = await Report.list(req.user, status);
+    const { status, category_id, date_from, date_to, q, sort, direction, page, limit } = req.query;
+    if (status && !STATUSES.includes(String(status))) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'Unknown status filter' } });
+    }
+    if ((date_from && !DATE_RE.test(String(date_from))) || (date_to && !DATE_RE.test(String(date_to)))) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'Dates must be written as YYYY-MM-DD' } });
+    }
+    const categoryId = category_id ? Number(category_id) : null;
+    if (category_id && !Number.isInteger(categoryId)) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'category_id must be a number' } });
+    }
+    const sortKey = sort ? String(sort) : 'created_at';
+    if (sort && !SORTABLE.includes(sortKey)) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: `sort must be one of: ${SORTABLE.join(', ')}` } });
+    }
+    const sortDirection = direction ? String(direction).toLowerCase() : 'desc';
+    if (direction && !['asc', 'desc'].includes(sortDirection)) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'direction must be asc or desc' } });
+    }
+    // Pagination only applies when page or limit is supplied; callers that do not
+    // ask for it keep receiving the plain array they always have.
+    let pageNumber = null;
+    let pageLimit = null;
+    if (page !== undefined || limit !== undefined) {
+      pageNumber = page === undefined ? 1 : Number(page);
+      pageLimit = limit === undefined ? 10 : Number(limit);
+      if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+        return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'page must be a positive integer' } });
+      }
+      if (!Number.isInteger(pageLimit) || pageLimit < 1 || pageLimit > 100) {
+        return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'limit must be an integer between 1 and 100' } });
+      }
+    }
+    const filters = {
+      status: status || null,
+      categoryId,
+      dateFrom: date_from || null,
+      dateTo: date_to || null,
+      search: q ? String(q).trim().slice(0, 100) || null : null,
+      sort: sortKey,
+      direction: sortDirection
+    };
+    if (pageNumber !== null) {
+      const result = await Report.listPage(req.user, { ...filters, page: pageNumber, limit: pageLimit });
+      return res.json(result);
+    }
+    const reports = await Report.list(req.user, filters);
     res.json(reports);
   } catch (err) { next(err); }
 });
@@ -46,6 +99,48 @@ router.get('/:id', async (req, res, next) => {
     const evidence = await Evidence.findByReport(report.id);
     const history = await StatusHistory.findByReport(report.id);
     res.json({ ...report, evidence, status_history: history });
+  } catch (err) { next(err); }
+});
+
+router.get('/:id/duplicates', requireRole('admin'), async (req, res, next) => {
+  try {
+    const report = await Report.findById(req.params.id);
+    if (!report) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Report not found' } });
+    const candidates = findDuplicateCandidates(report, await Report.findNearby(report));
+    res.json(candidates);
+  } catch (err) { next(err); }
+});
+
+// Marking and clearing duplicates is a human decision and is audited. Nothing
+// is merged automatically, and chains (B duplicates A, C duplicates B) are refused.
+router.patch('/:id/duplicate', requireRole('admin'), async (req, res, next) => {
+  try {
+    const report = await Report.findById(req.params.id);
+    if (!report) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Report not found' } });
+    const raw = req.body.duplicate_of_report_id;
+    if (raw === null || raw === undefined || raw === '') {
+      if (!report.duplicate_of_report_id) return res.json(report);
+      const cleared = await Report.setDuplicate(report.id, null);
+      await logAudit(req.user.id, 'DUPLICATE_CLEARED', 'report', report.id, req, { was_duplicate_of: report.duplicate_of_report_id });
+      return res.json(cleared);
+    }
+    const targetId = Number(raw);
+    if (!Number.isInteger(targetId) || targetId < 1) {
+      return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'duplicate_of_report_id must be a report id' } });
+    }
+    if (targetId === report.id) {
+      return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'A report cannot be a duplicate of itself' } });
+    }
+    const target = await Report.findById(targetId);
+    if (!target) {
+      return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'The original report does not exist' } });
+    }
+    if (target.duplicate_of_report_id) {
+      return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'The original report is itself marked as a duplicate, so chains are refused' } });
+    }
+    const flagged = await Report.setDuplicate(report.id, targetId);
+    await logAudit(req.user.id, 'DUPLICATE_FLAGGED', 'report', report.id, req, { duplicate_of_report_id: targetId });
+    res.json(flagged);
   } catch (err) { next(err); }
 });
 
@@ -85,13 +180,17 @@ router.get('/:id/evidence/:evidenceId', async (req, res, next) => {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Evidence not found' } });
     }
     // Files live on disk outside the web root and are only streamed after this authorization check.
-    const uploadRoot = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
     const filePath = path.resolve(process.cwd(), evidence.file_path);
-    if (!filePath.startsWith(uploadRoot)) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+    if (!filePath.startsWith(UPLOAD_ROOT)) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Evidence file is missing from storage' } });
-    res.setHeader('Content-Type', evidence.mime_type || 'application/octet-stream');
+    // Only files stored as images are shown inline. Anything else downloads as an
+    // attachment with a generic type, and the sandbox policy stops any script
+    // inside a stored file from running with this site's origin.
+    const isImage = /^image\//.test(String(evidence.mime_type));
+    res.setHeader('Content-Type', isImage ? evidence.mime_type : 'application/octet-stream');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Disposition', `inline; filename="${String(evidence.file_name).replace(/["\r\n]/g, '')}"`);
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('Content-Disposition', `${isImage ? 'inline' : 'attachment'}; filename="${sanitizeFileName(evidence.file_name)}"`);
     fs.createReadStream(filePath).on('error', next).pipe(res);
   } catch (err) { next(err); }
 });
@@ -103,12 +202,18 @@ router.post('/:id/evidence', requireRole('reporter', 'admin', 'traffic_officer')
     if (req.user.role === 'reporter' && report.reporter_id !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     if (req.user.role === 'traffic_officer' && report.assigned_to !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     if (!req.file) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'No file uploaded' } });
+    // The bytes decide the type; the browser-declared MIME type and filename are ignored.
+    const mimeType = await detectFileType(req.file.path);
+    if (!mimeType) {
+      await fs.promises.unlink(req.file.path).catch(() => {});
+      return res.status(422).json({ error: { code: 'UNSUPPORTED_FILE', message: 'Unsupported file type. Allowed: JPEG, PNG, GIF, WebP and PDF.' } });
+    }
     const evidence = await Evidence.create({
       reportId: report.id,
       uploaderId: req.user.id,
-      fileName: req.file.originalname,
+      fileName: sanitizeFileName(req.file.originalname),
       filePath: req.file.path,
-      mimeType: req.file.mimetype,
+      mimeType,
       description: req.body.description
     });
     await logAudit(req.user.id, 'UPLOAD_EVIDENCE', 'evidence', evidence.id, req, { report_id: report.id });
@@ -138,7 +243,10 @@ router.get('/:id/status-history', async (req, res, next) => {
   try {
     const report = await Report.findById(req.params.id);
     if (!report) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Report not found' } });
+    // Same visibility rules as GET /:id: reporters see their own reports, officers
+    // only the reports assigned to them.
     if (req.user.role === 'reporter' && report.reporter_id !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+    if (req.user.role === 'traffic_officer' && report.assigned_to !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     const history = await StatusHistory.findByReport(report.id);
     res.json(history);
   } catch (err) { next(err); }

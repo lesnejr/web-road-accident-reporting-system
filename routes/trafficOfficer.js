@@ -27,9 +27,6 @@ async function notifyStatusChange(report, oldStatus, newStatus, actorId, notes) 
   if (report.assigned_to && report.assigned_to !== actorId && report.assigned_to !== report.reporter_id) {
     await Notification.create({ userId: report.assigned_to, reportId: report.id, event: `report.${newStatus}`, message });
   }
-  if (actorId !== report.reporter_id) {
-    await Notification.create({ userId: report.reporter_id, reportId: report.id, event: `report.${newStatus}`, message });
-  }
 }
 
 router.get('/reports', async (req, res, next) => {

@@ -11,22 +11,45 @@ router.post('/register', async (req, res, next) => {
   try {
     // Role is never taken from the body: anyone who self-registers is a reporter.
     const { name, email, password, phone } = req.body;
+    const nameStr = typeof name === 'string' ? name.trim() : '';
+    const emailStr = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const passwordStr = typeof password === 'string' ? password : '';
+    const phoneStr = phone === undefined || phone === null ? '' : String(phone).trim();
+    // Length caps match the column sizes, so over-long input gets a field
+    // message instead of a database error; bcrypt only hashes 72 bytes.
     const fields = {};
-    if (!name || String(name).trim().length < 2) fields.name = 'Name is required';
-    if (!email || !validator.isEmail(String(email).trim())) fields.email = 'A valid email is required';
-    if (!password || String(password).length < 8) fields.password = 'Password must be at least 8 characters';
+    if (nameStr.length < 2) fields.name = 'Name is required';
+    else if (nameStr.length > 150) fields.name = 'Name must be 150 characters or fewer';
+    if (!validator.isEmail(emailStr)) fields.email = 'A valid email is required';
+    else if (emailStr.length > 150) fields.email = 'Email must be 150 characters or fewer';
+    if (passwordStr.length < 8) fields.password = 'Password must be at least 8 characters';
+    else if (Buffer.byteLength(passwordStr, 'utf8') > 72) fields.password = 'Password must be 72 characters or fewer';
+    if (phoneStr.length > 30) fields.phone = 'Phone must be 30 characters or fewer';
     if (Object.keys(fields).length > 0) {
       return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Registration details are invalid', fields } });
     }
     const user = await User.create({
-      name: String(name).trim(),
-      email: String(email).trim().toLowerCase(),
-      password: String(password),
-      phone: phone ? String(phone).trim() : null,
+      name: nameStr,
+      email: emailStr,
+      password: passwordStr,
+      phone: phoneStr || null,
       role: 'reporter'
     });
     res.status(201).json(user);
-  } catch (err) { next(err); }
+  } catch (err) {
+    // The only unique key on this insert is the email, so a duplicate entry
+    // here is that email and deserves a message next to the field.
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({
+        error: {
+          code: 'DUPLICATE_ENTRY',
+          message: 'An account with this email already exists',
+          fields: { email: 'An account with this email already exists' }
+        }
+      });
+    }
+    next(err);
+  }
 });
 
 router.post('/login', async (req, res, next) => {

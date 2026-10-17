@@ -22,6 +22,7 @@ export default function AdminDashboard() {
   const [filters, setFilters] = useState({ year: THIS_YEAR, compareYear: THIS_YEAR - 1, scope: 'verified', typeId: '', location: '' });
   const [location, setLocation] = useState('');
   const [categories, setCategories] = useState([]);
+  const [categoriesFailed, setCategoriesFailed] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -34,7 +35,9 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (USE_MOCK) return;
-    api.get('/accident-categories').then((r) => setCategories(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    api.get('/accident-categories')
+      .then((r) => setCategories(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setCategoriesFailed(true));
   }, []);
 
   const { year, compareYear, scope, typeId } = filters;
@@ -74,6 +77,16 @@ export default function AdminDashboard() {
               </div>
             </div>
             <DashboardFilters filters={filters} years={years} categories={categories} onChange={setFilters} />
+            {categoriesFailed && (
+              <p role="alert" className="ad-sub" style={{ marginTop: '0.25rem' }}>
+                Accident types could not be loaded, so the type filter is limited.
+              </p>
+            )}
+            {error && data && (
+              <p role="alert" className="ad-sub" style={{ marginTop: '0.25rem' }}>
+                The latest figures could not be loaded; showing the previous result.
+              </p>
+            )}
           </header>
 
           <div className="ad-kp">
@@ -125,13 +138,22 @@ export default function AdminDashboard() {
             </WidgetState>
           </Card>
 
+          <Card area="rc" title="Recent submissions">
+            <WidgetState {...st} empty={!data?.recent?.length} emptyText="No reports match these filters">
+              <NeedsAttentionTable rows={data?.recent || []} recent />
+            </WidgetState>
+          </Card>
+
           <Card area="df">
-            <div className="ad-df">
-              <b>How numbers are counted.</b> Each report is counted in the month it was submitted. <b>Total Submitted</b> = all reports.
-              {' '}<b>Pending</b> = Submitted + Under Review + Needs Clarification. <b>Verified</b> = verified by staff and not rejected.
-              {' '}<b>Closed</b> = Resolved. <b>Fatalities</b> = reports marked as involving fatalities.
-              {' '}KPIs, pipeline and status always include every report. The scope filter affects the injury, type, vehicle and map widgets.
-            </div>
+            <details className="ad-notes">
+              <summary>How numbers are counted</summary>
+              <div className="ad-df">
+                <b>How numbers are counted.</b> Each report is counted in the month it was submitted. <b>Total Submitted</b> = all reports.
+                {' '}<b>Pending</b> = Submitted + Under Review + Needs Clarification. <b>Verified</b> = verified by staff and not rejected.
+                {' '}<b>Closed</b> = Resolved. <b>Fatalities</b> = reports marked as involving fatalities.
+                {' '}KPIs, pipeline and status always include every report. The scope filter affects the injury, type, vehicle and map widgets.
+              </div>
+            </details>
           </Card>
         </div>
       </div>

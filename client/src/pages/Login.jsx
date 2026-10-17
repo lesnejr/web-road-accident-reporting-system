@@ -26,24 +26,36 @@ export default function Login() {
   };
 
   return (
-    <div className="container" style={{ maxWidth: '400px', marginTop: '4rem' }}>
-      <div className="card">
-        <h2 style={{ marginBottom: '1.5rem' }}>Login</h2>
-        {error && <div className="alert alert-error">{error}</div>}
+    <div className="auth-page">
+      <div className="card auth-card">
+        <div className="auth-brand">
+          <span className="nav-brand-mark" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 3l7 3v5c0 4.5-3 8.2-7 10-4-1.8-7-5.5-7-10V6l7-3z" />
+            </svg>
+          </span>
+          <span className="auth-brand-text">
+            <strong>Road Accident Reporting</strong>
+            <small>Traffic management</small>
+          </span>
+        </div>
+        <h1>Sign in</h1>
+        <p className="auth-sub">Report road accidents and track their progress.</p>
+        {error && <div className="alert alert-error" role="alert">{error}</div>}
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label>Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+            <label htmlFor="login-email">Email</label>
+            <input id="login-email" type="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} required />
           </div>
           <div className="form-group">
-            <label>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+            <label htmlFor="login-password">Password</label>
+            <input id="login-password" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required />
           </div>
-          <button className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
-            {loading ? 'Logging in...' : 'Login'}
+          <button className="btn btn-primary btn-block" disabled={loading}>
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-        <p style={{ marginTop: '1rem', textAlign: 'center' }}>
+        <p className="auth-switch">
           No account yet? <Link to="/register">Create one</Link>
         </p>
       </div>

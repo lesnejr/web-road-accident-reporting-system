@@ -96,15 +96,15 @@ export function StatusPipeline({ counts }) {
     <>
       <div className="ad-pipe">
         {PIPE.map((s) => (
-          <div key={s} className="ad-step">
+          <Link key={s} to={`/reports?status=${s}`} className="ad-step" title={`Open reports with status ${label(s)}`}>
             <i style={{ background: c.status[s] }} />
             <b>{fmt(counts[s])}</b><small>{label(s)}</small>
-          </div>
+          </Link>
         ))}
       </div>
       <div className="ad-side">
-        <span>Needs clarification: <b>{fmt(counts.needs_clarification)}</b></span>
-        <span>Rejected: <b>{fmt(counts.rejected)}</b></span>
+        <Link to="/reports?status=needs_clarification">Needs clarification: <b>{fmt(counts.needs_clarification)}</b></Link>
+        <Link to="/reports?status=rejected">Rejected: <b>{fmt(counts.rejected)}</b></Link>
       </div>
     </>
   );
@@ -163,12 +163,14 @@ export function VehicleStrip({ data }) {
   );
 }
 
-export function NeedsAttentionTable({ rows }) {
+// Serves both the waiting queue and the recent-submissions list; the waiting
+// column only makes sense for the former.
+export function NeedsAttentionTable({ rows, recent = false }) {
   const days = (d) => Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 86400000));
   return (
     <div className="ad-scroll">
       <table className="ad-tbl">
-        <thead><tr><th>Reference</th><th>Type</th><th>Location</th><th>Status</th><th>Submitted</th><th>Waiting</th></tr></thead>
+        <thead><tr><th>Reference</th><th>Type</th><th>Location</th><th>Status</th><th>Submitted</th>{!recent && <th>Waiting</th>}</tr></thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.id}>
@@ -177,7 +179,7 @@ export function NeedsAttentionTable({ rows }) {
               <td>{r.location}</td>
               <td><span className={`badge badge-${r.status}`}>{label(r.status)}</span></td>
               <td>{new Date(r.created_at).toLocaleDateString()}</td>
-              <td>{days(r.created_at)}d</td>
+              {!recent && <td>{days(r.created_at)}d</td>}
             </tr>
           ))}
         </tbody>

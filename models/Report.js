@@ -6,7 +6,8 @@ const STATUS_ORDER = ['submitted','under_review','needs_clarification','verified
 const INJURY_STATUSES = ['none', 'injuries', 'fatalities', 'unknown'];
 
 // Server-side validation for new reports. Returns a map of field -> message, or null when valid.
-function validateReport(data) {
+// Exported so the rules can be tested without a database.
+export function validateReport(data) {
   const fields = {};
   if (!data.title || String(data.title).trim().length < 3) fields.title = 'Title is required';
   if (!data.description || !String(data.description).trim()) fields.description = 'Description is required';
@@ -43,19 +44,35 @@ export const Report = {
       err.details = problems;
       throw err;
     }
-    const report_reference = await generateReportReference();
-    const [result] = await pool.query(
-      `INSERT INTO reports (report_reference, reporter_id, accident_category_id, title, description, accident_date, accident_time, location, latitude, longitude, vehicle_type, injury_status, severity, vehicles_involved, injuries, fatalities, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted')`,
-      [report_reference, reporterId, data.accident_category_id, data.title, data.description, data.accident_date, data.accident_time, data.location, data.latitude, data.longitude, data.vehicle_type, data.injury_status, data.severity, data.vehicles_involved, data.injuries, data.fatalities]
-    );
-    return this.findById(result.insertId);
+    const values = (reportReference) => [
+      reportReference, reporterId, data.accident_category_id, data.title, data.description,
+      data.accident_date, data.accident_time, data.location, data.latitude, data.longitude,
+      data.vehicle_type, data.injury_status, data.severity, data.vehicles_involved, data.injuries, data.fatalities
+    ];
+    // The reference is derived from a row count, so two simultaneous submissions
+    // can compute the same value. A duplicate key is retried with a fresh count.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        const [result] = await pool.query(
+          `INSERT INTO reports (report_reference, reporter_id, accident_category_id, title, description, accident_date, accident_time, location, latitude, longitude, vehicle_type, injury_status, severity, vehicles_involved, injuries, fatalities, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted')`,
+          values(await generateReportReference())
+        );
+        return this.findById(result.insertId);
+      } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY' && attempt < 4) continue;
+        throw err;
+      }
+    }
+    throw new Error('Could not allocate a report reference');
   },
   async findById(id) {
     const [rows] = await pool.query(
-      `SELECT r.*, u.name as reporter_name, u.email as reporter_email, ac.name as category_name
+      `SELECT r.*, u.name as reporter_name, u.email as reporter_email, ac.name as category_name,
+              o.name as assigned_officer_name
        FROM reports r
        JOIN users u ON r.reporter_id = u.id
+       LEFT JOIN users o ON r.assigned_to = o.id
        LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
        WHERE r.id = ?`,
       [id]
@@ -73,10 +90,33 @@ export const Report = {
     );
     return rows[0];
   },
-  async list(user, status = null) {
-    const { query, params } = buildReportQuery(user, status);
+  async list(user, filters = {}) {
+    const { query, params } = buildReportQuery(user, filters);
     const [rows] = await pool.query(query, params);
     return rows;
+  },
+  async listPage(user, filters) {
+    const { query, params, countQuery, countParams } = buildReportQuery(user, filters);
+    const [[{ total }]] = await pool.query(countQuery, countParams);
+    const [rows] = await pool.query(query, params);
+    return { data: rows, total, page: filters.page, limit: filters.limit };
+  },
+  // Reports within ±2 days of the target's accident date — enough to cover the
+  // 24 h window; the exact window is decided by utils/duplicates.js.
+  async findNearby(report) {
+    const [rows] = await pool.query(
+      `SELECT r.*, u.name as reporter_name, ac.name as category_name
+       FROM reports r
+       JOIN users u ON r.reporter_id = u.id
+       LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
+       WHERE r.id <> ? AND r.accident_date BETWEEN DATE_SUB(?, INTERVAL 2 DAY) AND DATE_ADD(?, INTERVAL 2 DAY)`,
+      [report.id, report.accident_date, report.accident_date]
+    );
+    return rows;
+  },
+  async setDuplicate(id, duplicateOfReportId) {
+    await pool.query('UPDATE reports SET duplicate_of_report_id = ? WHERE id = ?', [duplicateOfReportId, id]);
+    return this.findById(id);
   },
   async update(id, data, user) {
     const fields = [];
@@ -126,7 +166,19 @@ export const Report = {
   }
 };
 
-function buildReportQuery(user, status = null) {
+// Sorting is mapped through this whitelist; request values never reach the SQL string.
+const SORT_COLUMNS = {
+  created_at: 'r.created_at',
+  accident_date: 'r.accident_date',
+  status: 'r.status',
+  report_reference: 'r.report_reference'
+};
+
+function buildReportQuery(user, filters = {}) {
+  const {
+    status = null, categoryId = null, dateFrom = null, dateTo = null, search = null,
+    sort = 'created_at', direction = 'desc', page = null, limit = null
+  } = filters;
   // Every condition goes into WHERE. Officers see only reports assigned to them.
   const conditions = [];
   const params = [];
@@ -141,14 +193,39 @@ function buildReportQuery(user, status = null) {
     conditions.push('r.status = ?');
     params.push(status);
   }
+  if (categoryId) {
+    conditions.push('r.accident_category_id = ?');
+    params.push(categoryId);
+  }
+  if (dateFrom) {
+    conditions.push('r.accident_date >= ?');
+    params.push(dateFrom);
+  }
+  if (dateTo) {
+    conditions.push('r.accident_date <= ?');
+    params.push(dateTo);
+  }
+  if (search) {
+    const like = `%${search}%`;
+    conditions.push('(r.title LIKE ? OR r.location LIKE ? OR r.report_reference LIKE ?)');
+    params.push(like, like, like);
+  }
+  const where = conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : '';
+  const orderColumn = SORT_COLUMNS[sort] || SORT_COLUMNS.created_at;
+  const orderDirection = String(direction).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   let query = `
     SELECT r.*, u.name as reporter_name, u.email as reporter_email,
-           ac.name as category_name
+           ac.name as category_name, o.name as assigned_officer_name
     FROM reports r
     JOIN users u ON r.reporter_id = u.id
+    LEFT JOIN users o ON r.assigned_to = o.id
     LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
-  `;
-  if (conditions.length > 0) query += ' WHERE ' + conditions.join(' AND ');
-  query += ' ORDER BY r.created_at DESC';
-  return { query, params };
+  ${where} ORDER BY ${orderColumn} ${orderDirection}`;
+  const queryParams = [...params];
+  if (page && limit) {
+    query += ' LIMIT ? OFFSET ?';
+    queryParams.push(limit, (page - 1) * limit);
+  }
+  const countQuery = `SELECT COUNT(*) AS total FROM reports r${where}`;
+  return { query, params: queryParams, countQuery, countParams: params };
 }
