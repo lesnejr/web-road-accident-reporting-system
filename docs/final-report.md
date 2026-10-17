@@ -35,6 +35,7 @@ The first session had built and hardened most of the system but left a working t
 | W6 docs | Task 15 | `44426f3` | README full pass, evidence-backed requirements matrix, this report |
 | Review | post-review fix pass | `62e14cb` | Whole-branch review by a fresh-context subagent; fixed: undeclared `categoriesError` state in ReportForm (UI crash on the report form), Modal focus/Esc during busy, PDF stream error handling, dashboard stale-data banner, dead `buildReportQuery` export, README pagination wording |
 | User testing | live browser pass | `0c05ae0` | User testing found the admin/officer action panels offered illegal transitions (e.g. Assign Officer on a submitted report → server 409, which is the designed rule). Panels now render only the actions legal from the current status. |
+| Requirements audit | master-prompt sections 5–8 | `6309982` | Every required dashboard, list and detail element checked against the brief; the one missing component — a Recent submissions list (5.A.3) — was added. The Section 6 status mapping (all suggested states exist under equivalent names, no renames or migrations) and the 12 Section 8 acceptance checks are recorded in `docs/requirements-matrix.md`. |
 
 ## 3. Files added and changed
 
@@ -66,6 +67,7 @@ Docs: `README.md` (full pass), `docs/requirements-matrix.md` (evidence-backed), 
 | `PATCH /api/reports/:id/duplicate` | New, admin only. Sets `duplicate_of_report_id` or clears it when the field is empty; refuses self-reference and chains (422); audits both decisions. |
 | `GET /api/summaries/reports/export` | `format=csv\|pdf` (others 400). Both formats carry the scope line and one line per applied filter. |
 | `GET /api/summaries/reports/summaries` | `format=json\|pdf` (others 400). |
+| `GET /api/summaries/dashboard/stats` | Also returns `recent` — the latest 8 submissions of the selected year under the type/location filters (added in `6309982` for requirement 5.A.3). |
 
 ## 6. Tests executed and actual results
 
@@ -78,6 +80,7 @@ Docs: `README.md` (full pass), `docs/requirements-matrix.md` (evidence-backed), 
 | Live smoke, run 2 (lifecycle) | Registration 201 (role forced); all three role logins; `submitted → under_review → verified → assigned` all 200; findings 200; `assigned → in_progress → resolved` all 200; `resolved → submitted` refused 409; status history 5 rows newest-first with actor names; reporter notifications exactly one per event (7 events); officer exactly one (assignment); duplicate candidates `{ report, reasons: [time_window, distance, location_text] }`, flag 200, chain 422, self-reference 422, clear 200; dashboard stats 200 (`kpis`, `monthlySeries`, `pipeline`, `byStatus`, `byInjury`); monthly summaries bucket `2026-10` = 2 (1 submitted, 1 resolved); audit rows `VERIFY_REPORT` ×3, `ADD_FINDINGS`, `UPDATE_STATUS` ×2, `CREATE_REPORT`, `UPLOAD_EVIDENCE`, both duplicate decisions. |
 | Client dev server probe | Vite serves `index.html`; the `/api` proxy targets port 5000; CORS preflight from the configured origin returns `allow-origin`. (Port 3000 was busy on this machine, so Vite fell back to 3002 — harmless because the browser uses the Vite proxy.) |
 | Post-review verification (after the fix pass) | `cd client && npm test` 8/8 and `npm run build` pass; `node --test --test-concurrency=1 tests/exports.test.js tests/summaries.test.js tests/transitions.test.js` 14/14; full root `npm test` **46/46** in ≈4 min. |
+| Sections 5–8 audit verification (after the Recent submissions change) | Client build pass; client tests 8/8; `tests/summaries.test.js` 1/1 (boots the real app); live API check of the new `recent` list — 3 rows newest first, typeId filter 2 rows / 0 mismatches, year 2025 empty; backend restarted so the new endpoint is live. The full root suite was **not** re-run after this change. |
 
 Three run-2 checks initially failed because of wrong assumptions in the smoke script itself (duplicate candidate shape, history ordering, summaries JSON shape). Each was confirmed against the source first (`utils/duplicates.js`, `models/StatusHistory.js`, `routes/summaries.js`); no product change was needed, and the corrected script passed 7/7.
 
@@ -93,7 +96,7 @@ Not run (honest list): browser-interactive behaviour (modal Esc/focus trap, dupl
 
 ## 8. Requirements compliance
 
-Per-requirement status with evidence: `docs/requirements-matrix.md`. Summary: FR-01, FR-02, FR-03, FR-05, FR-06, FR-07, FR-08, FR-09, FR-10, FR-11, FR-12, FR-13, FR-14, FR-15 are **Tested** with live or suite evidence from this session; FR-04 (location/GPS) is **Partial** because browser permission flows cannot be machine-verified here. The mobile application is **Not Implemented — excluded by team decision**.
+Per-requirement status with evidence: `docs/requirements-matrix.md`. Summary: FR-01, FR-02, FR-03, FR-05, FR-06, FR-07, FR-08, FR-09, FR-10, FR-11, FR-12, FR-13, FR-14, FR-15 are **Tested** with live or suite evidence from this session; FR-04 (location/GPS) is **Partial** because browser permission flows cannot be machine-verified here. The mobile application is **Not Implemented — excluded by team decision**. The master-prompt sections 5–8 audit is recorded in the same file, including the Section 6 status mapping and the 12 Section 8 acceptance checks with their verification type; checks that still need a human in a browser are marked manual-pending there, not verified.
 
 ## 9. Limitations
 
