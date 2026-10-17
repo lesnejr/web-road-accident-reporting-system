@@ -32,11 +32,12 @@ The first session had built and hardened most of the system but left a working t
 | W3 exports | Task 11 | `ba381c8` | `format=csv\|pdf` on the reports export, `format=json\|pdf` on summaries; shared scope/filter header lines (`utils/exportHeader.js`); pdfkit added |
 | W5 tests | Task 12 | `0f00f4a` | Summary date-boundary fixtures (week/month/year breaks, `to`-day inclusivity, 422 on bad dates) |
 | W4 UI states | Task 13 | `cddabd1` | Tables degrade to labelled cards ≤640 px (`data-label` + `:has`), nav/pager small-screen tweaks, every client `catch` now renders an error state or flag except two documented best-effort cases |
-| W6 docs | this task | (uncommitted at the time of writing; committed as `docs: verified README, requirements matrix, and final report`) | README full pass, evidence-backed requirements matrix, this report |
+| W6 docs | Task 15 | `44426f3` | README full pass, evidence-backed requirements matrix, this report |
+| Review | post-review fix pass | `62e14cb` | Whole-branch review by a fresh-context subagent; fixed: undeclared `categoriesError` state in ReportForm (UI crash on the report form), Modal focus/Esc during busy, PDF stream error handling, dashboard stale-data banner, dead `buildReportQuery` export, README pagination wording |
 
 ## 3. Files added and changed
 
-Since the baseline snapshot (`e8616fb..HEAD` before this documentation commit): 43 files changed, +1947 / −135.
+Since the baseline snapshot (`e8616fb..HEAD` at the documentation commit): 43 files changed, +1947 / −135; the post-review fix pass then touched 6 further files (+27 / −27).
 
 Added (backend): `utils/duplicates.js`, `utils/exportHeader.js`, `database/migrations/003_duplicate_reports.sql`, `scripts/db-setup.js` (extended), test helpers (`tests/helpers/testDb.js`, `tests/helpers/api.js`) and test files (`tests/smoke.test.js`, `tests/dbSetup.test.js`, `tests/admin.test.js`, `tests/evidence.test.js`, `tests/pagination.test.js`, `tests/duplicates.test.js`, `tests/exports.test.js`, `tests/summaries.test.js`).
 
@@ -75,6 +76,7 @@ Docs: `README.md` (full pass), `docs/requirements-matrix.md` (evidence-backed), 
 | Live smoke, run 1 (scripted against a running `node server.js` and the dev DB) | **17/17** — health; admin/reporter login; paged envelope and legacy array contract; `accident_date` ascending; report created (`RA-2026-000001`) with coordinates; duplicates 200 for admin / 403 for reporter; CSV export with scope line, `Filter - status: submitted` and the fresh reference; both PDFs `%PDF-` … `%%EOF` (1530/1666 bytes); evidence upload 201 → download 200, exact 70 bytes, `nosniff`. |
 | Live smoke, run 2 (lifecycle) | Registration 201 (role forced); all three role logins; `submitted → under_review → verified → assigned` all 200; findings 200; `assigned → in_progress → resolved` all 200; `resolved → submitted` refused 409; status history 5 rows newest-first with actor names; reporter notifications exactly one per event (7 events); officer exactly one (assignment); duplicate candidates `{ report, reasons: [time_window, distance, location_text] }`, flag 200, chain 422, self-reference 422, clear 200; dashboard stats 200 (`kpis`, `monthlySeries`, `pipeline`, `byStatus`, `byInjury`); monthly summaries bucket `2026-10` = 2 (1 submitted, 1 resolved); audit rows `VERIFY_REPORT` ×3, `ADD_FINDINGS`, `UPDATE_STATUS` ×2, `CREATE_REPORT`, `UPLOAD_EVIDENCE`, both duplicate decisions. |
 | Client dev server probe | Vite serves `index.html`; the `/api` proxy targets port 5000; CORS preflight from the configured origin returns `allow-origin`. (Port 3000 was busy on this machine, so Vite fell back to 3002 — harmless because the browser uses the Vite proxy.) |
+| Post-review verification (after the fix pass) | `cd client && npm test` 8/8 and `npm run build` pass; `node --test --test-concurrency=1 tests/exports.test.js tests/summaries.test.js tests/transitions.test.js` 14/14; full root `npm test` **46/46** in ≈4 min. |
 
 Three run-2 checks initially failed because of wrong assumptions in the smoke script itself (duplicate candidate shape, history ordering, summaries JSON shape). Each was confirmed against the source first (`utils/duplicates.js`, `models/StatusHistory.js`, `routes/summaries.js`); no product change was needed, and the corrected script passed 7/7.
 
@@ -102,6 +104,7 @@ Per-requirement status with evidence: `docs/requirements-matrix.md`. Summary: FR
 - Summaries return at most the 50 most recent periods per range.
 - `database/migrations/002_notifications.sql` uses MariaDB syntax (`CREATE INDEX IF NOT EXISTS`).
 - Evidence downloads are not audited (reads only).
+- Deferred Low findings from the review: the unused `csv-writer` dependency remains in `package.json`; the export endpoint accepts unknown `status`/`category_id` values and returns an empty file instead of 422; audit-log `page`/`limit` are not validated (admin-only); `db-setup` does not regex-validate the database name (operator-controlled).
 
 ## 10. Next steps
 
