@@ -1,12 +1,45 @@
 import express from 'express';
+import PDFDocument from 'pdfkit';
 import pool from '../config/db.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { buildCsv } from '../utils/csv.js';
+import { exportHeaderLines } from '../utils/exportHeader.js';
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'));
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// ---- Export helpers -------------------------------------------------------------------
+// Simple monospace tables: fixed character columns in Courier keep rows aligned
+// without a table library. Long cells are truncated to their column width.
+function writePdfTable(doc, widths, header, rows) {
+  const line = (cells) => cells.map((cell, i) => String(cell ?? '').slice(0, widths[i]).padEnd(widths[i])).join(' ');
+  doc.font('Courier').fontSize(7.5).fillColor('#000000');
+  doc.text(line(header));
+  for (const row of rows) doc.text(line(row));
+}
+
+function renderPdf(res, filename, headerLines, renderBody) {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  doc.pipe(res);
+  for (const headerLine of headerLines) {
+    doc.font('Helvetica').fontSize(9).fillColor('#444444').text(headerLine.replace(/^#\s*/, ''));
+  }
+  doc.moveDown();
+  renderBody(doc);
+  doc.end();
+}
+
+// Dates from mysql2 arrive as Date objects; exports show them as written in the UI.
+const dayText = (value) => value instanceof Date
+  ? `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
+  : String(value ?? '');
+const stampText = (value) => value instanceof Date
+  ? `${dayText(value)} ${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`
+  : String(value ?? '');
 
 // Mount at /api/summaries
 
@@ -165,7 +198,10 @@ router.get('/dashboard/map', async (req, res, next) => {
 
 router.get('/reports/summaries', async (req, res, next) => {
   try {
-    const { period = 'monthly', from, to } = req.query;
+    const { period = 'monthly', from, to, format } = req.query;
+    if (format && format !== 'json' && format !== 'pdf') {
+      return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'format=json or format=pdf required' } });
+    }
     if ((from && !DATE_RE.test(String(from))) || (to && !DATE_RE.test(String(to)))) {
       return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'Dates must be written as YYYY-MM-DD' } });
     }
@@ -200,14 +236,25 @@ router.get('/reports/summaries', async (req, res, next) => {
       LIMIT 50
     `, params);
 
+    if (format === 'pdf') {
+      const rangeText = from || to ? ` (${from || 'earliest'} to ${to || 'latest'}, submission date)` : '';
+      const headerLines = exportHeaderLines({ scope: 'all', period: `${period}${rangeText}` });
+      return renderPdf(res, `accident-summaries-${period}-${new Date().toISOString().slice(0, 10)}.pdf`, headerLines, (doc) => {
+        writePdfTable(doc, [12, 6, 8, 9, 8, 8, 8, 8, 8, 8],
+          ['period', 'total', 'submittd', 'underrev', 'clarif', 'verified', 'assigned', 'inprog', 'resolved', 'rejected'],
+          rows.map(r => [r.period, r.count, r.submitted, r.under_review, r.needs_clarification, r.verified, r.assigned, r.in_progress, r.resolved, r.rejected]));
+      });
+    }
     res.json({ period, data: rows });
   } catch (err) { next(err); }
 });
 
 router.get('/reports/export', async (req, res, next) => {
   try {
-    if (req.query.format !== 'csv') return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'format=csv required' } });
-    if (req.user.role !== 'admin') return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin only' } });
+    const format = req.query.format;
+    if (format !== 'csv' && format !== 'pdf') {
+      return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'format=csv or format=pdf required' } });
+    }
 
     const { status, category_id, date_from, date_to, verified, q } = req.query;
     if ((date_from && !DATE_RE.test(String(date_from))) || (date_to && !DATE_RE.test(String(date_to)))) {
@@ -240,18 +287,37 @@ router.get('/reports/export', async (req, res, next) => {
     query += ' ORDER BY r.created_at DESC';
 
     const [reports] = await pool.query(query, params);
+
+    // CSV and PDF share one header block, so both files state the same scope and filters.
+    let categoryName = null;
+    if (category_id) {
+      const [categories] = await pool.query('SELECT name FROM accident_categories WHERE id = ?', [category_id]);
+      categoryName = categories[0]?.name || String(category_id);
+    }
+    const headerLines = exportHeaderLines({
+      scope,
+      filters: { status, category: categoryName, date_from, date_to, search: q && String(q).trim() }
+    });
+    const fileStem = `accident-reports-${scope}-${new Date().toISOString().slice(0, 10)}`;
+
+    if (format === 'pdf') {
+      return renderPdf(res, `${fileStem}.pdf`, headerLines, (doc) => {
+        writePdfTable(doc, [14, 30, 10, 12, 26, 14],
+          ['reference', 'title', 'accident', 'status', 'location', 'category'],
+          reports.map(r => [r.report_reference, r.title, dayText(r.accident_date), r.status, r.location, r.category_name]));
+      });
+    }
+
     const headers = ['report_reference','title','description','accident_date','accident_time','location','vehicle_type','injury_status','severity','vehicles_involved','injuries','fatalities','status','reporter_name','reporter_email','category_name','created_at'];
-    const rows = reports.map(r => headers.map(h => r[h] ?? ''));
-    // Every export states its scope in the first row, so an unverified export can never be mistaken for official data.
-    const scopeLine = scope === 'all'
-      ? '# INCLUDES UNVERIFIED public-submitted reports, which are not official records'
-      : scope === 'unverified'
-        ? '# Unverified public-submitted reports only, not official records'
-        : '# Verified official records only';
-    const csv = buildCsv([[scopeLine], headers, ...rows]);
+    const rows = reports.map(r => headers.map(h => {
+      if (h === 'accident_date') return dayText(r[h]);
+      if (h === 'created_at') return stampText(r[h]);
+      return r[h] ?? '';
+    }));
+    const csv = buildCsv([...headerLines.map((line) => [line]), headers, ...rows]);
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="accident-reports-${scope}-${new Date().toISOString().slice(0,10)}.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileStem}.csv"`);
     res.send(csv);
   } catch (err) { next(err); }
 });
