@@ -78,8 +78,8 @@ XAMPP's Apache is not required; the app runs on Node's own server plus MySQL.
 ## Tests and build
 
 ```
-npm test                    # backend: 46 tests (pure logic + integration against *_test databases)
-cd client && npm test       # frontend: 8 tests (routing helpers)
+npm test                    # backend: 50 tests (pure logic + integration against *_test databases)
+cd client && npm test       # frontend: 12 tests (routing and navigation helpers)
 cd client && npm run build  # production build; succeeds, one chunk-size warning (not an error)
 ```
 
@@ -96,6 +96,14 @@ Statuses: `submitted → under_review → verified → assigned → in_progress 
 ### Duplicate review
 
 The admin report page lists possible duplicates for the report being viewed. A candidate must fall within ±24 hours of the accident time and additionally match on at least one of: the same accident category, coordinates within 300 m (both reports must carry coordinates), or a matching location text. Nothing is merged automatically. An admin flags the pair as duplicate or clears the decision, and both actions are recorded in the audit log (`DUPLICATE_FLAGGED` / `DUPLICATE_CLEARED`). Chains are refused: a report that is already marked as a duplicate of another cannot be used as the original.
+
+## Navigation and interface
+
+The signed-in app uses a collapsible left navigation rail grouped by role: **Overview** (Dashboard); **Reporting** (My Reports and Submit Report for reporters, Accident Reports and My Assigned Reports for officers, All Accident Reports and Summaries for admins); **Administration** (User Management, Audit Logs — admins only); and **General** (Accident Map, Notifications). Only destinations allowed for the signed-in role are shown, and hiding an item is never the access control — route and API authorization are unchanged. The rail collapses to icons on desktop (choice remembered in `localStorage`) and becomes a drawer below 1024 px, opened from the header and closed by Escape, the backdrop, the Close button or choosing a destination; Tab cycles inside it while it is open. The compact header carries the current section name on small screens, the notification bell, the theme toggle, the user's name and role, and Log out.
+
+Light is the default theme; the dark theme remains one header click away, and both read the same tokens in `client/src/index.css`. The admin analytics dashboard uses the same card and token system as every other page. Shared state patterns: `.loading-state` for in-progress loads, `.empty-state` for zero-data screens, `.card-head` for card headings with actions, plus the existing `.card`, `.btn`, `.badge`, `.table`, `.filter-bar`, `.pager`, `.alert` and `Modal`/`ConfirmDialog`. The role-to-menu model and its pure helpers live in `client/src/services/navigation.js`, covered by `client/src/services/navigation.test.js`.
+
+The report detail page follows one reading order: header (status badge, official/public record chip, submitted time, and Edit for the report's owner), **Accident details** (a label/value grid with consistently formatted dates, times, coordinates and counts, plus the description), **People and verification** (reporter, assigned officer, verifier, verification notes and officer findings when present), **Location map** (with an explicit empty state when the report has no coordinates), **Evidence** (file-kind label, uploader, View and Download), a single **Review and workflow** card that lists only the actions the signed-in role can take — labelled as actions ("Start review", "Mark as verified", "Request more information", "Reject report", …), with reject as the only red button — **Duplicate review** for admins, and a collapsed **Status history** disclosure. The dashboard's "How numbers are counted" reference text is collapsed the same way.
 
 ## API overview
 
@@ -136,7 +144,7 @@ The admin report page lists possible duplicates for the report being viewed. A c
 ## Known limitations
 
 - The web client only; the mobile app is excluded by team decision.
-- The admin UI ships the CSV download button; PDF uses the same endpoint with `format=pdf` and has no dedicated button yet.
+- The admin UI ships CSV and PDF download buttons on the Reports page and a PDF button on the Summaries page; every export carries the same filters and verification scope as the list it was run from.
 - Summaries return at most the 50 most recent periods for a chosen range.
 - `GET /api/reports` pagination is opt-in: the reports list page always sends `page`; the dashboard and map pages intentionally use the legacy array shape.
 - Rate limiting and the logout blocklist are in-memory (single-process deployments only).
@@ -159,8 +167,11 @@ The admin report page lists possible duplicates for the report being viewed. A c
 
 All commands below were run in this repository on 2026-10-17 (Node v24.18.0, MariaDB 10.4.32 via XAMPP):
 
-- Backend: `npm test` → **46/46 pass** (about 4 min 48 s), including integration tests for pagination and sorting, duplicate candidates and flag/clear, filtered CSV and PDF exports, summary date boundaries, evidence authorization and the database setup script.
-- Frontend: `cd client && npm test` → **8/8 pass**; `cd client && npm run build` → succeeds (one informational chunk-size warning).
+- Backend: `npm test` → **50/50 pass** (about 4 min 41 s), including integration tests for registration (field/length validation, role injection, password hashing, duplicate and repeated submission), pagination and sorting, duplicate candidates and flag/clear, filtered CSV and PDF exports (formula-injection, unicode, long text and empty-set cases included), summary date boundaries, evidence authorization and the database setup script.
+- Frontend: `cd client && npm test` → **12/12 pass** (routing helpers plus the navigation-model tests); `cd client && npm run build` → succeeds (one informational chunk-size warning).
+- Navigation and UI overhaul: the full root suite was re-run after the overhaul — `npm test` → **47/47 pass**, the same as the pre-overhaul baseline; client tests and build as above. No browser automation exists in this repository, so the rail collapse, the mobile drawer, dark/light appearance and the 375/768/1024/1440 px layouts are covered by the manual pass below, not by machine checks.
+- UI simplification pass: client `npm test` → **12/12 pass**; `npm run build` → succeeds, and the earlier CSS minifier warning is gone after fixing a stray brace that had disabled the 640 px media query guarding the table-to-card rules (tables had stacked at every width). The full root suite was re-run — `npm test` → **47/47 pass**, the same as the baseline (≈4 min 21 s).
+- FR-01 registration pass: new `tests/auth.test.js` was written first and failed against the old code (over-long values reached the database and returned a 500; duplicates had no field message), then passed 3/3 after the fix; `cd client && npm test` → **12/12 pass** and `npm run build` → succeeds after all client edits; a live probe on the running dev API (synthetic account, deleted afterwards) showed registration → 201 with the submitted `role: 'admin'` ignored (stored as `reporter`), no `password_hash` in the response, a duplicate → 409 with `fields.email`, and login → 200 with a reporter token. Full root suite: `npm test` → **50/50 pass** (≈4 min 41 s).
 - Live smoke against a running server and the development database, using the development accounts: registration (201, reporter role forced); login for all three roles; report creation (reference `RA-2026-000001`) with coordinates; evidence upload (201) and authorized download (200, exact bytes, `nosniff`); the full lifecycle `submitted → under_review → verified → assigned → in_progress → resolved` with findings, one notification per event (7 events, no duplicates) and an illegal transition refused with 409; duplicate candidates returned with `time_window + distance + location_text` reasons, flag → 200, chain and self-reference → 422, clear → 200; dashboard stats 200; the monthly summaries bucket counting the new reports; CSV export carrying the scope statement, the filter line and the fresh reference; both PDF exports starting `%PDF-` and ending `%%EOF`; audit log carrying `VERIFY_REPORT` ×3, `ADD_FINDINGS`, `UPDATE_STATUS` ×2, `CREATE_REPORT`, `UPLOAD_EVIDENCE` and both duplicate decisions.
 
-Not machine-verified (needs a human in a browser before the demonstration): modal keyboard behaviour (Esc, focus trap), the duplicate-review panel clicks, the responsive card layout at 375 px, GPS permission flows, and opening the downloaded CSV/PDF in a viewer. The development database currently holds the smoke artifacts (two reports, one evidence file, one extra registered user).
+Not machine-verified (needs a human in a browser before the demonstration): modal keyboard behaviour (Esc, focus trap), the duplicate-review panel clicks, the responsive card layout at 375 px, GPS permission flows, opening the downloaded CSV/PDF in a viewer, clicking a notification to open its report, downloading evidence, the new report-list columns on narrow screens, the collapsible navigation rail and mobile drawer, the light/dark appearance of the re-skinned analytics dashboard, layout checks at 375/768/1024/1440 px, and the UI-simplification items (the reorganized report-detail page, the collapsed Status history and "How numbers are counted" disclosures, the per-role action-button wording, and the restored table layout at desktop width), and the registration page's per-field server error messages and the post-registration success notice on the dashboard. The development database currently holds the smoke artifacts (three reports, evidence files, one extra registered user).

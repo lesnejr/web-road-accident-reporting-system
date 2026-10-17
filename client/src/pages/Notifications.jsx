@@ -1,9 +1,11 @@
 ﻿import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 export default function Notifications() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [data, setData] = useState({ rows: [], total: 0, page: 1, limit: 20 });
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -48,12 +50,17 @@ export default function Notifications() {
     }
   };
 
+  const openReport = async (n) => {
+    if (!n.is_read) await handleRead(n.id);
+    navigate(`/reports/${n.report_id}`);
+  };
+
   return (
     <div className="container">
-      <div className="page-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="page-title card-head">
         <h1>Notifications</h1>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', cursor: 'pointer' }}>
+        <div className="card-actions">
+          <label className="notif-filter">
             <input type="checkbox" checked={unreadOnly} onChange={e => setUnreadOnly(e.target.checked)} />
             Unread only
           </label>
@@ -64,28 +71,49 @@ export default function Notifications() {
       {error && <div className="alert alert-error" role="alert">{error}</div>}
 
       <div className="card">
-        {loading ? <div>Loading...</div> : data.rows.length === 0 ? (
-          error ? null : <p style={{ color: 'hsl(var(--text-3))', textAlign: 'center', padding: '2rem' }}>No notifications</p>
+        {loading ? (
+          <p className="loading-state" role="status">Loading notifications…</p>
+        ) : data.rows.length === 0 ? (
+          <div className="empty-state">
+            <strong>Nothing to read</strong>
+            <span>Updates about your reports will appear here.</span>
+          </div>
         ) : (
           <>
-            <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            <div className="notif-list">
               {data.rows.map(n => (
-                <div key={n.id} style={{ padding: '1rem', borderBottom: '1px solid hsl(var(--line) / var(--line-alpha))', background: n.is_read ? 'transparent' : 'hsl(var(--accent) / 0.12)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div
+                  key={n.id}
+                  className={`notif-row${n.is_read ? '' : ' is-unread'}${n.report_id ? ' is-clickable' : ''}`}
+                  onClick={n.report_id ? () => openReport(n) : undefined}
+                >
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: n.is_read ? 'normal' : 'bold', marginBottom: '0.25rem' }}>{n.message}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-3))' }}>
+                    <div className="notif-msg">
+                      {n.report_id ? (
+                        <Link to={`/reports/${n.report_id}`} onClick={(e) => { e.stopPropagation(); if (!n.is_read) handleRead(n.id); }}>{n.message}</Link>
+                      ) : n.message}
+                    </div>
+                    <div className="notif-meta">
+                      {!n.is_read && <span className="notif-unread">Unread</span>}
                       {new Date(n.created_at).toLocaleString()}
                       {n.report_reference && <span style={{ marginLeft: '0.5rem' }}>• {n.report_reference}</span>}
                     </div>
                   </div>
-                  {!n.is_read && <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} onClick={() => handleRead(n.id)}>Mark read</button>}
+                  {!n.is_read && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={(e) => { e.stopPropagation(); handleRead(n.id); }}
+                    >
+                      Mark read
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
             {data.total > data.limit && (
-              <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1rem' }}>
+              <div className="pager">
                 <button className="btn btn-secondary" onClick={() => setPage(p => p - 1)} disabled={page <= 1 || loading}>Previous</button>
-                <span style={{ alignSelf: 'center' }}>Page {data.page} of {Math.ceil(data.total / data.limit)}</span>
+                <span>Page {data.page} of {Math.ceil(data.total / data.limit)}</span>
                 <button className="btn btn-secondary" onClick={() => setPage(p => p + 1)} disabled={data.page * data.limit >= data.total || loading}>Next</button>
               </div>
             )}

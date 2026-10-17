@@ -113,11 +113,14 @@ export default function AdminUsers() {
     try { await confirmState.run(); } finally { setBusyConfirm(false); setConfirmState(null); }
   };
 
-  if (loading) return <div className="container">Loading...</div>;
+  if (loading) return <div className="container"><p className="loading-state" role="status">Loading users…</p></div>;
 
   return (
     <div className="container">
-      <div className="page-title"><h1>User Management</h1></div>
+      <div className="page-title">
+        <h1>User Management</h1>
+        <p>Staff accounts and public reporters.</p>
+      </div>
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {notice && <div className="alert alert-success" role="status">{notice}</div>}
@@ -171,7 +174,12 @@ export default function AdminUsers() {
       </div>
 
       <div className="card">
-        {users.length === 0 ? <p style={{ color: 'hsl(var(--text-3))' }}>No users found.</p> : (
+        {users.length === 0 ? (
+          <div className="empty-state">
+            <strong>No users found</strong>
+            <span>Adjust the role or status filter, or create an account above.</span>
+          </div>
+        ) : (
           <table className="table">
             <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Phone</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
             <tbody>
@@ -188,7 +196,7 @@ export default function AdminUsers() {
                   <td data-label="Status"><span className={`badge badge-${u.is_active ? 'resolved' : 'rejected'}`}>{u.is_active ? 'Active' : 'Inactive'}</span></td>
                   <td data-label="Created">{new Date(u.created_at).toLocaleDateString()}</td>
                   <td data-label="Actions">
-                    <button className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
+                    <button className="btn btn-secondary btn-sm"
                       onClick={() => toggleActive(u)} disabled={busyId === u.id || u.id === currentUser.id}>
                       {u.is_active ? 'Deactivate' : 'Activate'}
                     </button>

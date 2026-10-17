@@ -18,16 +18,24 @@ export default function OfficerReports() {
       });
   }, []);
 
-  if (loading) return <div className="container">Loading...</div>;
+  if (loading) return <div className="container"><p className="loading-state" role="status">Loading your assigned reports…</p></div>;
 
   return (
     <div className="container">
-      <div className="page-title"><h1>My Assigned Reports</h1></div>
+      <div className="page-title">
+        <h1>My Assigned Reports</h1>
+        <p>Accident reports the administrator has assigned to you.</p>
+      </div>
 
       <div className="card">
-        {error ? <div className="alert alert-error" role="alert">{error}</div> : reports.length === 0 ? <p style={{ color: 'hsl(var(--text-3))' }}>No assigned reports.</p> : (
+        {error ? <div className="alert alert-error" role="alert">{error}</div> : reports.length === 0 ? (
+          <div className="empty-state">
+            <strong>No assigned reports</strong>
+            <span>Reports assigned to you will appear here.</span>
+          </div>
+        ) : (
           <table className="table">
-            <thead><tr><th>Reference</th><th>Title</th><th>Location</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Reference</th><th>Title</th><th>Location</th><th>Status</th><th>Submitted</th><th>Actions</th></tr></thead>
             <tbody>
               {reports.map(r => (
                 <tr key={r.id}>
@@ -35,8 +43,8 @@ export default function OfficerReports() {
                   <td data-label="Title"><Link to={`/reports/${r.id}`}>{r.title}</Link></td>
                   <td data-label="Location">{r.location}</td>
                   <td data-label="Status"><span className={`badge badge-${r.status}`}>{r.status.replace('_', ' ')}</span></td>
-                  <td data-label="Date">{new Date(r.created_at).toLocaleDateString()}</td>
-                  <td data-label="Actions"><Link to={`/reports/${r.id}`} className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}>View</Link></td>
+                  <td data-label="Submitted">{new Date(r.created_at).toLocaleDateString()}</td>
+                  <td data-label="Actions"><Link to={`/reports/${r.id}`} className="btn btn-secondary btn-sm">View</Link></td>
                 </tr>
               ))}
             </tbody>

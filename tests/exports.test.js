@@ -98,3 +98,51 @@ test('CSV and PDF exports carry the same headers and stay admin-only', async () 
     await pool.end();
   }
 });
+
+// Section 10.4: hostile content, unicode, long text and empty result sets must
+// not corrupt either format.
+test('exports survive formula-like text, unicode, long text and empty sets', async () => {
+  const { pool } = await setupTestDb();
+  const server = await startTestServer();
+  try {
+    const [reporter] = await pool.query("INSERT INTO users (name, email, password_hash) VALUES ('Hostile Reporter', 'hostile.reporter@test.local', 'not-a-login')");
+    const [category] = await pool.query("INSERT INTO accident_categories (name, description) VALUES ('Hostile Test Type', 'for tests')");
+    const longDescription = `${'A'.repeat(500)}\nSecond line with "quotes" and, commas`;
+    await pool.query(
+      `INSERT INTO reports (report_reference, reporter_id, title, description, accident_date, location, injury_status, status, accident_category_id)
+       VALUES ('HOST-0001', ?, '=SUM(A1:A9) Formula', ?, '2026-02-12', 'Café «Ñ» 東京 & 5th "Main"', 'unknown', 'submitted', ?)`,
+      [reporter.insertId, longDescription, category.insertId]
+    );
+
+    const token = await loginAs('admin@local.test', TEST_PASSWORD);
+
+    const csv = await request('/api/summaries/reports/export?format=csv&verified=all&q=HOST-0001', { token });
+    assert.equal(csv.status, 200);
+    const text = String(csv.data);
+    assert.ok(text.includes('"\'=SUM(A1:A9) Formula"'), 'formula-like text must stay neutralised and quoted');
+    assert.ok(!text.includes(',"=SUM'), 'no cell may start with a formula character after escaping');
+    assert.ok(text.includes('Café «Ñ» 東京'), 'unicode must survive the CSV round trip');
+    assert.ok(text.includes('""Main""'), 'embedded quotes must be doubled');
+    assert.ok(text.includes('A'.repeat(500)) && text.includes('Second line'), 'long multi-line text must survive');
+
+    const emptyCsv = await request('/api/summaries/reports/export?format=csv&verified=all&q=no-such-report-xyz', { token });
+    assert.equal(emptyCsv.status, 200);
+    const emptyText = String(emptyCsv.data);
+    assert.match(emptyText, /report_reference/, 'an empty export still carries the column header row');
+    assert.ok(!emptyText.includes('HOST-0001'));
+
+    const pdf = await request('/api/summaries/reports/export?format=pdf&verified=all&q=HOST-0001', { token, binary: true });
+    assert.equal(pdf.status, 200);
+    assert.equal(pdf.data.subarray(0, 5).toString('latin1'), '%PDF-');
+    assert.ok(pdf.data.includes(Buffer.from('%%EOF')), 'PDF must be complete');
+    assert.ok(pdf.data.length > 1000, 'PDF must carry the header block and rows');
+
+    const emptyPdf = await request('/api/summaries/reports/export?format=pdf&verified=all&q=no-such-report-xyz', { token, binary: true });
+    assert.equal(emptyPdf.status, 200);
+    assert.equal(emptyPdf.data.subarray(0, 5).toString('latin1'), '%PDF-');
+    assert.ok(emptyPdf.data.includes(Buffer.from('%%EOF')));
+  } finally {
+    await server.stop();
+    await pool.end();
+  }
+});

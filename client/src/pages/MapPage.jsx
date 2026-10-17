@@ -194,9 +194,11 @@ export default function MapPage() {
   useLayoutEffect(() => {
     measureChrome();
     window.addEventListener('resize', measureChrome);
-    const nav = document.querySelector('.navbar');
+    // The compact header is what sits above the alert bar now; observing it
+    // catches height changes (wrapping, width breakpoints) the resize event can miss.
+    const header = document.querySelector('.app-header');
     const observer = new ResizeObserver(measureChrome);
-    if (nav) observer.observe(nav);
+    if (header) observer.observe(header);
 
     return () => {
       window.removeEventListener('resize', measureChrome);

@@ -28,19 +28,27 @@ export default function AdminAuditLogs() {
 
   return (
     <div className="container">
-      <div className="page-title"><h1>Audit Logs</h1></div>
+      <div className="page-title">
+        <h1>Audit Logs</h1>
+        <p>Every administrative action recorded by the system.</p>
+      </div>
 
       <div className="card" style={{ marginBottom: '1rem' }}>
         <div className="status-filter">
-          <input type="text" placeholder="User ID" value={filters.userId} onChange={e => setFilters({...filters, userId: e.target.value})} style={{ width: 'auto', minWidth: '150px' }} />
-          <input type="text" placeholder="Action" value={filters.action} onChange={e => setFilters({...filters, action: e.target.value})} style={{ width: 'auto', minWidth: '150px' }} />
-          <input type="text" placeholder="Entity Type" value={filters.entityType} onChange={e => setFilters({...filters, entityType: e.target.value})} style={{ width: 'auto', minWidth: '150px' }} />
+          <input type="text" aria-label="Filter by user ID" placeholder="User ID" value={filters.userId} onChange={e => setFilters({...filters, userId: e.target.value})} style={{ width: 'auto', minWidth: '150px' }} />
+          <input type="text" aria-label="Filter by action" placeholder="Action" value={filters.action} onChange={e => setFilters({...filters, action: e.target.value})} style={{ width: 'auto', minWidth: '150px' }} />
+          <input type="text" aria-label="Filter by entity type" placeholder="Entity Type" value={filters.entityType} onChange={e => setFilters({...filters, entityType: e.target.value})} style={{ width: 'auto', minWidth: '150px' }} />
           <button className="btn btn-secondary" onClick={() => setFilters({userId:'',action:'',entityType:''})}>Clear</button>
         </div>
       </div>
 
       <div className="card">
-        {loading ? <div>Loading...</div> : error ? <div className="alert alert-error" role="alert">{error}</div> : data.rows.length === 0 ? <p style={{ color: 'hsl(var(--text-3))' }}>No audit logs.</p> : (
+        {loading ? <p className="loading-state" role="status">Loading audit logs…</p> : error ? <div className="alert alert-error" role="alert">{error}</div> : data.rows.length === 0 ? (
+          <div className="empty-state">
+            <strong>No audit logs</strong>
+            <span>Administrative actions will be recorded here.</span>
+          </div>
+        ) : (
           <>
             <table className="table">
               <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Entity</th><th>Entity ID</th><th>IP</th><th>Details</th></tr></thead>
@@ -58,9 +66,9 @@ export default function AdminAuditLogs() {
                 ))}
               </tbody>
             </table>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1rem' }}>
+            <div className="pager">
               <button className="btn btn-secondary" onClick={() => setPage(p => p - 1)} disabled={page <= 1 || loading}>Previous</button>
-              <span style={{ alignSelf: 'center' }}>Page {data.page} of {Math.ceil(data.total / data.limit)}</span>
+              <span>Page {data.page} of {Math.ceil(data.total / data.limit)}</span>
               <button className="btn btn-secondary" onClick={() => setPage(p => p + 1)} disabled={data.page * data.limit >= data.total || loading}>Next</button>
             </div>
           </>

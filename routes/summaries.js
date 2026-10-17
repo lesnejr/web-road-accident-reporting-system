@@ -12,15 +12,37 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // ---- Export helpers -------------------------------------------------------------------
 // Simple monospace tables: fixed character columns in Courier keep rows aligned
-// without a table library. Long cells are truncated to their column width.
-function writePdfTable(doc, widths, header, rows) {
-  const line = (cells) => cells.map((cell, i) => String(cell ?? '').slice(0, widths[i]).padEnd(widths[i])).join(' ');
-  doc.font('Courier').fontSize(7.5).fillColor('#000000');
-  doc.text(line(header));
-  for (const row of rows) doc.text(line(row));
+// without a table library. Long cells are trimmed to their column width with an
+// ellipsis marker; headers repeat after a page break. `state` carries the page
+// counter and writes the footer onto the page being left behind.
+function writePdfTable(doc, widths, header, rows, state) {
+  const fit = (cell, width) => {
+    const text = String(cell ?? '');
+    return text.length > width ? `${text.slice(0, width - 1)}…` : text;
+  };
+  const line = (cells) => cells.map((cell, i) => fit(cell, widths[i]).padEnd(widths[i])).join(' ');
+  const writeHeader = () => {
+    doc.font('Courier').fontSize(7.5).fillColor('#000000');
+    doc.text(line(header));
+  };
+  writeHeader();
+  if (rows.length === 0) {
+    doc.moveDown(0.5);
+    doc.font('Helvetica').fontSize(9).fillColor('#444444').text('No records match the applied filters.');
+    return;
+  }
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  for (const row of rows) {
+    if (doc.y + 10 > bottom) {
+      if (state) state.newPage();
+      else doc.addPage();
+      writeHeader();
+    }
+    doc.text(line(row));
+  }
 }
 
-function renderPdf(res, filename, headerLines, renderBody) {
+function renderPdf(res, filename, title, headerLines, renderBody) {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -29,11 +51,25 @@ function renderPdf(res, filename, headerLines, renderBody) {
   doc.on('error', (err) => res.destroy(err));
   res.on('close', () => { if (!doc.destroyed) doc.destroy(); });
   doc.pipe(res);
+  // Page numbers are tracked here because the document is streamed, not buffered.
+  const state = { page: 1 };
+  const footer = () => {
+    const y = doc.page.height - doc.page.margins.bottom + 8;
+    const savedY = doc.y;
+    doc.font('Helvetica').fontSize(7.5).fillColor('#666666')
+      .text(`Page ${state.page}`, doc.page.margins.left, y, { lineBreak: false });
+    doc.y = savedY;
+  };
+  state.newPage = () => { footer(); doc.addPage(); state.page += 1; };
+  doc.font('Helvetica-Bold').fontSize(13).fillColor('#111111').text(title);
+  doc.font('Helvetica').fontSize(8).fillColor('#666666').text(`Generated ${stampText(new Date())}`);
+  doc.moveDown(0.5);
   for (const headerLine of headerLines) {
     doc.font('Helvetica').fontSize(9).fillColor('#444444').text(headerLine.replace(/^#\s*/, ''));
   }
   doc.moveDown();
-  renderBody(doc);
+  renderBody(doc, state);
+  footer();
   doc.end();
 }
 
@@ -253,10 +289,10 @@ router.get('/reports/summaries', async (req, res, next) => {
     if (format === 'pdf') {
       const rangeText = from || to ? ` (${from || 'earliest'} to ${to || 'latest'}, submission date)` : '';
       const headerLines = exportHeaderLines({ scope: 'all', period: `${period}${rangeText}` });
-      return renderPdf(res, `accident-summaries-${period}-${new Date().toISOString().slice(0, 10)}.pdf`, headerLines, (doc) => {
+      return renderPdf(res, `accident-summaries-${period}-${new Date().toISOString().slice(0, 10)}.pdf`, `Accident Summary Report (${period})`, headerLines, (doc, state) => {
         writePdfTable(doc, [12, 6, 8, 9, 8, 8, 8, 8, 8, 8],
           ['period', 'total', 'submittd', 'underrev', 'clarif', 'verified', 'assigned', 'inprog', 'resolved', 'rejected'],
-          rows.map(r => [r.period, r.count, r.submitted, r.under_review, r.needs_clarification, r.verified, r.assigned, r.in_progress, r.resolved, r.rejected]));
+          rows.map(r => [r.period, r.count, r.submitted, r.under_review, r.needs_clarification, r.verified, r.assigned, r.in_progress, r.resolved, r.rejected]), state);
       });
     }
     res.json({ period, data: rows });
@@ -315,10 +351,10 @@ router.get('/reports/export', async (req, res, next) => {
     const fileStem = `accident-reports-${scope}-${new Date().toISOString().slice(0, 10)}`;
 
     if (format === 'pdf') {
-      return renderPdf(res, `${fileStem}.pdf`, headerLines, (doc) => {
+      return renderPdf(res, `${fileStem}.pdf`, 'Road Accident Reports', headerLines, (doc, state) => {
         writePdfTable(doc, [14, 30, 10, 12, 26, 14],
           ['reference', 'title', 'accident', 'status', 'location', 'category'],
-          reports.map(r => [r.report_reference, r.title, dayText(r.accident_date), r.status, r.location, r.category_name]));
+          reports.map(r => [r.report_reference, r.title, dayText(r.accident_date), r.status, r.location, r.category_name]), state);
       });
     }
 

@@ -68,9 +68,11 @@ export const Report = {
   },
   async findById(id) {
     const [rows] = await pool.query(
-      `SELECT r.*, u.name as reporter_name, u.email as reporter_email, ac.name as category_name
+      `SELECT r.*, u.name as reporter_name, u.email as reporter_email, ac.name as category_name,
+              o.name as assigned_officer_name
        FROM reports r
        JOIN users u ON r.reporter_id = u.id
+       LEFT JOIN users o ON r.assigned_to = o.id
        LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
        WHERE r.id = ?`,
       [id]
@@ -213,9 +215,10 @@ function buildReportQuery(user, filters = {}) {
   const orderDirection = String(direction).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
   let query = `
     SELECT r.*, u.name as reporter_name, u.email as reporter_email,
-           ac.name as category_name
+           ac.name as category_name, o.name as assigned_officer_name
     FROM reports r
     JOIN users u ON r.reporter_id = u.id
+    LEFT JOIN users o ON r.assigned_to = o.id
     LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
   ${where} ORDER BY ${orderColumn} ${orderDirection}`;
   const queryParams = [...params];

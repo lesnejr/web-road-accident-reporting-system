@@ -96,15 +96,15 @@ export function StatusPipeline({ counts }) {
     <>
       <div className="ad-pipe">
         {PIPE.map((s) => (
-          <div key={s} className="ad-step">
+          <Link key={s} to={`/reports?status=${s}`} className="ad-step" title={`Open reports with status ${label(s)}`}>
             <i style={{ background: c.status[s] }} />
             <b>{fmt(counts[s])}</b><small>{label(s)}</small>
-          </div>
+          </Link>
         ))}
       </div>
       <div className="ad-side">
-        <span>Needs clarification: <b>{fmt(counts.needs_clarification)}</b></span>
-        <span>Rejected: <b>{fmt(counts.rejected)}</b></span>
+        <Link to="/reports?status=needs_clarification">Needs clarification: <b>{fmt(counts.needs_clarification)}</b></Link>
+        <Link to="/reports?status=rejected">Rejected: <b>{fmt(counts.rejected)}</b></Link>
       </div>
     </>
   );

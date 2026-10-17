@@ -145,12 +145,15 @@ export default function AdminDashboard() {
           </Card>
 
           <Card area="df">
-            <div className="ad-df">
-              <b>How numbers are counted.</b> Each report is counted in the month it was submitted. <b>Total Submitted</b> = all reports.
-              {' '}<b>Pending</b> = Submitted + Under Review + Needs Clarification. <b>Verified</b> = verified by staff and not rejected.
-              {' '}<b>Closed</b> = Resolved. <b>Fatalities</b> = reports marked as involving fatalities.
-              {' '}KPIs, pipeline and status always include every report. The scope filter affects the injury, type, vehicle and map widgets.
-            </div>
+            <details className="ad-notes">
+              <summary>How numbers are counted</summary>
+              <div className="ad-df">
+                <b>How numbers are counted.</b> Each report is counted in the month it was submitted. <b>Total Submitted</b> = all reports.
+                {' '}<b>Pending</b> = Submitted + Under Review + Needs Clarification. <b>Verified</b> = verified by staff and not rejected.
+                {' '}<b>Closed</b> = Resolved. <b>Fatalities</b> = reports marked as involving fatalities.
+                {' '}KPIs, pipeline and status always include every report. The scope filter affects the injury, type, vehicle and map widgets.
+              </div>
+            </details>
           </Card>
         </div>
       </div>
