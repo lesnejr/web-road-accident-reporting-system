@@ -4,6 +4,13 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import { SingleReportMap } from '../components/MapView';
 
+const REASON_LABELS = {
+  time_window: 'within 24 h',
+  same_category: 'same category',
+  distance: 'within 300 m',
+  location_text: 'matching location'
+};
+
 export default function ReportDetail() {
   const { user } = useAuth();
   const { id } = useParams();
@@ -21,6 +28,10 @@ export default function ReportDetail() {
   const [assignTo, setAssignTo] = useState('');
   const [pendingFile, setPendingFile] = useState(null);
   const [fileDesc, setFileDesc] = useState('');
+  const [duplicates, setDuplicates] = useState(null);
+  const [duplicateOriginal, setDuplicateOriginal] = useState(null);
+  const [duplicateLoading, setDuplicateLoading] = useState(false);
+  const [duplicateError, setDuplicateError] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -45,6 +56,32 @@ export default function ReportDetail() {
       .then(res => setOfficers(res.data))
       .catch(() => {});
   }, [user.role]);
+
+  // Duplicate candidates load for admins only. When the report is already
+  // flagged, the original is fetched so it can be shown and linked.
+  useEffect(() => {
+    if (user.role !== 'admin' || !report) return;
+    let active = true;
+    async function loadDuplicates() {
+      setDuplicateLoading(true);
+      setDuplicateError('');
+      try {
+        if (report.duplicate_of_report_id) {
+          const res = await api.get(`/reports/${report.duplicate_of_report_id}`);
+          if (active) setDuplicateOriginal(res.data);
+        } else {
+          const res = await api.get(`/reports/${id}/duplicates`);
+          if (active) setDuplicates(res.data);
+        }
+      } catch (err) {
+        if (active) setDuplicateError(err.response?.data?.error?.message || 'The duplicate check could not be loaded.');
+      } finally {
+        if (active) setDuplicateLoading(false);
+      }
+    }
+    loadDuplicates();
+    return () => { active = false; };
+  }, [id, user.role, report?.duplicate_of_report_id]);
 
   const handleStatusChange = async (newStatus, reason) => {
     setStatusLoading(true);
@@ -131,6 +168,23 @@ export default function ReportDetail() {
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch {
       setError('Could not open the evidence file');
+    }
+  };
+
+  // Marking or clearing a duplicate is a human decision and is audited server-side.
+  const setDuplicateFlag = async (targetId) => {
+    setStatusLoading(true);
+    setDuplicateError('');
+    setNotice('');
+    try {
+      await api.patch(`/reports/${id}/duplicate`, { duplicate_of_report_id: targetId });
+      const res = await api.get(`/reports/${id}`);
+      setReport(res.data);
+      setNotice(targetId ? 'Report marked as a duplicate.' : 'Duplicate flag cleared.');
+    } catch (err) {
+      setDuplicateError(err.response?.data?.error?.message || 'The duplicate flag could not be updated.');
+    } finally {
+      setStatusLoading(false);
     }
   };
 
@@ -288,6 +342,57 @@ export default function ReportDetail() {
                 <button className="btn btn-secondary" disabled={statusLoading} onClick={() => setAction(null)}>Cancel</button>
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="card">
+          <h3>Duplicate Review</h3>
+          {duplicateError && <div className="alert alert-error" role="alert">{duplicateError}</div>}
+          {report.duplicate_of_report_id ? (
+            <>
+              <p>
+                This report is marked as a duplicate of{' '}
+                <Link to={`/reports/${report.duplicate_of_report_id}`}>
+                  {duplicateOriginal ? duplicateOriginal.report_reference : `report #${report.duplicate_of_report_id}`}
+                </Link>.
+              </p>
+              <div className="action-buttons">
+                <button type="button" className="btn btn-secondary" disabled={statusLoading} onClick={() => setDuplicateFlag(null)}>
+                  Clear duplicate flag
+                </button>
+              </div>
+            </>
+          ) : duplicateLoading ? (
+            <p className="muted">Checking for possible duplicates...</p>
+          ) : !duplicates || duplicates.length === 0 ? (
+            <p className="muted">No possible duplicates found within 24 hours.</p>
+          ) : (
+            <>
+              <p className="muted">A human decides — nothing is merged automatically.</p>
+              <ul className="duplicate-list">
+                {duplicates.map(candidate => (
+                  <li key={candidate.report.id}>
+                    <div>
+                      <Link to={`/reports/${candidate.report.id}`}>{candidate.report.report_reference}</Link>{' '}
+                      <strong>{candidate.report.title}</strong>
+                      <div className="muted">
+                        {candidate.report.accident_date} {candidate.report.accident_time || ''} • {candidate.report.location}
+                      </div>
+                      <div className="reason-chips">
+                        {candidate.reasons.map(reason => (
+                          <span key={reason} className="badge badge-submitted">{REASON_LABELS[reason] || reason}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <button type="button" className="btn btn-secondary" disabled={statusLoading} onClick={() => setDuplicateFlag(candidate.report.id)}>
+                      Mark duplicate
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
       )}

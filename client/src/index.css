@@ -344,6 +344,11 @@ label {
 
 .pager { display: flex; align-items: center; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
 
+.duplicate-list { list-style: none; margin: 0; padding: 0; }
+.duplicate-list li { display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid hsl(var(--line) / var(--line-alpha)); flex-wrap: wrap; }
+.duplicate-list li:last-child { border-bottom: none; }
+.reason-chips { display: flex; gap: 0.35rem; flex-wrap: wrap; margin-top: 0.35rem; }
+
 .status-filter { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
 .status-filter select { width: auto; min-width: 180px; }
 .filter-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 1rem; align-items: end; margin-bottom: 1rem; }
