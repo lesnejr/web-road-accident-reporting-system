@@ -1,0 +1,4 @@
+# Defense in depth: evidence files must never be served by Apache directly, only
+# streamed by the API after an authorization check. Kept for installs that still
+# point UPLOAD_DIR at this directory.
+Require all denied

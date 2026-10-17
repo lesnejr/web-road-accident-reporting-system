@@ -5,7 +5,9 @@ node_modules/
 dist/
 client/node_modules/
 client/dist/
-# Uploaded evidence is data, not source. Never commit it.
-uploads/
+# Uploaded evidence is data, not source. Never commit it (the deny rule below is
+# source, so it stays tracked).
+uploads/*
+!uploads/.htaccess
 coverage/
 .superpowers/
