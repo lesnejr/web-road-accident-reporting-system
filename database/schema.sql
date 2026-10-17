@@ -2,7 +2,7 @@
 -- Roles: reporter, admin, traffic_officer
 -- Status: submitted, under_review, needs_clarification, verified, assigned, in_progress, resolved, rejected
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(150) NOT NULL,
   email VARCHAR(150) NOT NULL UNIQUE,
@@ -14,14 +14,14 @@ CREATE TABLE users (
   updated_at TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP
 );
 
-CREATE TABLE accident_categories (
+CREATE TABLE IF NOT EXISTS accident_categories (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(150) NOT NULL UNIQUE,
   description VARCHAR(255) NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE reports (
+CREATE TABLE IF NOT EXISTS reports (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   report_reference VARCHAR(20) NOT NULL UNIQUE,
   reporter_id INT UNSIGNED NOT NULL,
@@ -53,7 +53,7 @@ CREATE TABLE reports (
   CONSTRAINT fk_reports_category FOREIGN KEY (accident_category_id) REFERENCES accident_categories(id) ON DELETE SET NULL
 );
 
-CREATE TABLE report_evidence (
+CREATE TABLE IF NOT EXISTS report_evidence (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   report_id INT UNSIGNED NOT NULL,
   uploader_id INT UNSIGNED NOT NULL,
@@ -66,7 +66,7 @@ CREATE TABLE report_evidence (
   CONSTRAINT fk_evidence_uploader FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE RESTRICT
 );
 
-CREATE TABLE report_status_history (
+CREATE TABLE IF NOT EXISTS report_status_history (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   report_id INT UNSIGNED NOT NULL,
   changed_by INT UNSIGNED NOT NULL,
@@ -78,7 +78,7 @@ CREATE TABLE report_status_history (
   CONSTRAINT fk_history_user FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE RESTRICT
 );
 
-CREATE TABLE audit_logs (
+CREATE TABLE IF NOT EXISTS audit_logs (
   id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id INT UNSIGNED NULL,
   action VARCHAR(150) NOT NULL,

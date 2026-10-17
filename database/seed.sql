@@ -11,4 +11,5 @@ INSERT INTO accident_categories (name, description) VALUES
 ('Hit and Run', 'Driver flees the scene'),
 ('Pedestrian Accident', 'Involving pedestrian'),
 ('Motorcycle Accident', 'Motorcycle-related'),
-('Other', 'Other accident types');
+('Other', 'Other accident types')
+ON DUPLICATE KEY UPDATE description = VALUES(description);
