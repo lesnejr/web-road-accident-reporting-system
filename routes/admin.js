@@ -78,14 +78,14 @@ router.patch('/users/:id', async (req, res, next) => {
     if (Object.keys(update).length === 0) {
       return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Nothing to update' } });
     }
-    // An administrator must never lock the system out of its last account.
-    if (target.role === 'admin' && target.is_active === 1 && update.is_active === 0) {
-      const activeAdmins = await User.countActiveAdmins();
-      if (activeAdmins <= 1) {
-        return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'The last active administrator cannot be deactivated' } });
-      }
+    // An administrator must never lock the system out of its last account. The
+    // guard runs inside a transaction so concurrent requests cannot both pass it.
+    const result = await User.updateWithAdminGuard(id, update);
+    if (result.notFound) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+    if (result.lastAdmin) {
+      return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'The last active administrator cannot be deactivated' } });
     }
-    const user = await User.update(id, update);
+    const user = result.user;
     await logAudit(req.user.id, 'UPDATE_USER', 'user', id, req, update);
     res.json(user);
   } catch (err) { next(err); }
@@ -103,13 +103,14 @@ router.patch('/users/:id/role', async (req, res, next) => {
     if (id === req.user.id && role !== 'admin') {
       return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'You cannot change your own role' } });
     }
-    if (target.role === 'admin' && target.is_active === 1 && role !== 'admin') {
-      const activeAdmins = await User.countActiveAdmins();
-      if (activeAdmins <= 1) {
-        return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'The last active administrator cannot be demoted' } });
-      }
+    // Same transactional guard as deactivation: concurrent demotions must not
+    // both pass the last-admin check.
+    const result = await User.updateWithAdminGuard(id, { role });
+    if (result.notFound) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
+    if (result.lastAdmin) {
+      return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'The last active administrator cannot be demoted' } });
     }
-    const user = await User.update(id, { role });
+    const user = result.user;
     await logAudit(req.user.id, 'USER_ROLE_CHANGED', 'user', id, req, { from: target.role, to: role });
     res.json(user);
   } catch (err) { next(err); }
