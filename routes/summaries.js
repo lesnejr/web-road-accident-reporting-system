@@ -1,9 +1,12 @@
 import express from 'express';
 import pool from '../config/db.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { buildCsv } from '../utils/csv.js';
 
 const router = express.Router();
 router.use(requireAuth, requireRole('admin'));
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Mount at /api/summaries
 
@@ -163,10 +166,14 @@ router.get('/dashboard/map', async (req, res, next) => {
 router.get('/reports/summaries', async (req, res, next) => {
   try {
     const { period = 'monthly', from, to } = req.query;
+    if ((from && !DATE_RE.test(String(from))) || (to && !DATE_RE.test(String(to)))) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'Dates must be written as YYYY-MM-DD' } });
+    }
     let dateFilter = '';
     const params = [];
     if (from) { dateFilter += ' AND r.created_at >= ?'; params.push(from); }
-    if (to) { dateFilter += ' AND r.created_at <= ?'; params.push(to); }
+    // `to` is inclusive of the whole end day, so a range ending "today" includes today.
+    if (to) { dateFilter += ' AND r.created_at < DATE_ADD(?, INTERVAL 1 DAY)'; params.push(to); }
 
     let groupBy = '';
     switch (period) {
@@ -202,7 +209,10 @@ router.get('/reports/export', async (req, res, next) => {
     if (req.query.format !== 'csv') return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'format=csv required' } });
     if (req.user.role !== 'admin') return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Admin only' } });
 
-    const { status, category_id, date_from, date_to, verified } = req.query;
+    const { status, category_id, date_from, date_to, verified, q } = req.query;
+    if ((date_from && !DATE_RE.test(String(date_from))) || (date_to && !DATE_RE.test(String(date_to)))) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'Dates must be written as YYYY-MM-DD' } });
+    }
     // Verified official records only by default. verified=all adds public-submitted reports.
     const scope = verified === 'false' ? 'unverified' : verified === 'all' ? 'all' : 'verified';
     let query = `
@@ -220,6 +230,11 @@ router.get('/reports/export', async (req, res, next) => {
     if (category_id) { query += ' AND r.accident_category_id = ?'; params.push(category_id); }
     if (date_from) { query += ' AND r.accident_date >= ?'; params.push(date_from); }
     if (date_to) { query += ' AND r.accident_date <= ?'; params.push(date_to); }
+    if (q && String(q).trim()) {
+      const like = `%${String(q).trim().slice(0, 100)}%`;
+      query += ' AND (r.title LIKE ? OR r.location LIKE ? OR r.report_reference LIKE ?)';
+      params.push(like, like, like);
+    }
     if (scope === 'verified') { query += ' AND r.verified_at IS NOT NULL AND r.status != "rejected"'; }
     if (scope === 'unverified') { query += ' AND (r.verified_at IS NULL OR r.status = "rejected")'; }
     query += ' ORDER BY r.created_at DESC';
@@ -233,7 +248,7 @@ router.get('/reports/export', async (req, res, next) => {
       : scope === 'unverified'
         ? '# Unverified public-submitted reports only, not official records'
         : '# Verified official records only';
-    const csv = [scopeLine, headers.join(','), ...rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(','))].join('\n');
+    const csv = buildCsv([[scopeLine], headers, ...rows]);
 
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename="accident-reports-${scope}-${new Date().toISOString().slice(0,10)}.csv"`);

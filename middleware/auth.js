@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import pool from '../config/db.js';
 
 // Token ids invalidated by logout. In-memory, so a server restart clears it.
-// shortcut: move to a DB table if the API ever runs more than one process
+// ponytail: in-memory blocklist; move to a DB table if the API ever runs more than one process
 const blockedTokenIds = new Set();
 
 export function blockToken(token) {

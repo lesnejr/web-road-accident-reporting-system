@@ -53,5 +53,9 @@ export const User = {
   },
   async verifyPassword(user, password) {
     return bcrypt.compare(password, user.password_hash);
+  },
+  async countActiveAdmins() {
+    const [[{ n }]] = await pool.query("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND is_active = 1");
+    return n;
   }
 };

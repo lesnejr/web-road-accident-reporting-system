@@ -2,12 +2,25 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import { ReportMap } from '../components/MapView';
 
 const initialForm = {
   title: '', description: '', accident_date: '', accident_time: '',
   location: '', latitude: '', longitude: '', vehicle_type: '',
   injury_status: 'unknown', severity: '', vehicles_involved: '',
   injuries: '', fatalities: '', accident_category_id: ''
+};
+
+// Geo status messages. The manual fallback is always described, because the
+// device position is a convenience and never a requirement.
+const GEO_LABEL = {
+  idle: '',
+  locating: 'Requesting your location...',
+  granted: 'Device location captured. Coordinates from a device are approximate and are not verified by staff.',
+  picked: 'Map point selected. Coordinates from a map pick are approximate and are not verified by staff.',
+  denied: 'Location permission was denied, so no coordinates were captured. Type the location and use the map or the latitude and longitude fields below.',
+  unsupported: 'This browser does not support location access. Type the location and use the map or the latitude and longitude fields below.',
+  error: 'Your location could not be read. Try again, or type the location below.'
 };
 
 export default function ReportForm() {
@@ -20,6 +33,42 @@ export default function ReportForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [geo, setGeo] = useState({ state: 'idle' });
+
+  const hasCoordinates = Number.isFinite(Number(form.latitude)) && Number.isFinite(Number(form.longitude))
+    && form.latitude !== '' && form.longitude !== '';
+
+  const useMyLocation = () => {
+    if (!navigator.geolocation) {
+      setGeo({ state: 'unsupported' });
+      return;
+    }
+    setGeo({ state: 'locating' });
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setForm((f) => ({
+          ...f,
+          latitude: position.coords.latitude.toFixed(6),
+          longitude: position.coords.longitude.toFixed(6)
+        }));
+        setGeo({ state: 'granted', accuracy: Math.round(position.coords.accuracy) });
+        setShowMap(true);
+      },
+      (err) => setGeo({ state: err.code === 1 ? 'denied' : 'error' }),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const handleMapPick = (latitude, longitude) => {
+    setForm((f) => ({ ...f, latitude: latitude.toFixed(6), longitude: longitude.toFixed(6) }));
+    setGeo({ state: 'picked' });
+  };
+
+  const clearCoordinates = () => {
+    setForm((f) => ({ ...f, latitude: '', longitude: '' }));
+    setGeo({ state: 'idle' });
+  };
 
   useEffect(() => {
     api.get('/accident-categories').then(res => setCategories(res.data)).catch(() => {});
@@ -109,14 +158,47 @@ export default function ReportForm() {
             <label>Location *</label>
             <input type="text" value={form.location} onChange={e => setForm({...form, location: e.target.value})} required placeholder="Street, City, Landmark" />
           </div>
+
+          <div className="form-group">
+            <label>Coordinates (optional)</label>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+              <button type="button" className="btn btn-secondary" onClick={useMyLocation} disabled={geo.state === 'locating' || geo.state === 'unsupported'}>
+                {geo.state === 'locating' ? 'Locating...' : 'Use my current location'}
+              </button>
+              <button type="button" className={`btn ${showMap ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowMap(open => !open)}>
+                {showMap ? 'Hide map' : 'Pick on map'}
+              </button>
+              {hasCoordinates && (
+                <button type="button" className="btn btn-secondary" onClick={clearCoordinates}>Clear coordinates</button>
+              )}
+            </div>
+            {geo.state !== 'idle' && (
+              <p className="muted" role="status">
+                {GEO_LABEL[geo.state]}
+                {geo.state === 'granted' && geo.accuracy ? ` Accurate to about ${geo.accuracy} m.` : ''}
+              </p>
+            )}
+            {showMap && (
+              <div style={{ marginTop: '0.5rem' }}>
+                <ReportMap
+                  reports={[]}
+                  height={300}
+                  focus={hasCoordinates ? { latitude: Number(form.latitude), longitude: Number(form.longitude) } : null}
+                  onMapPick={handleMapPick}
+                />
+                <p className="muted" style={{ marginTop: '0.25rem' }}>Click the accident spot on the map to fill the coordinates.</p>
+              </div>
+            )}
+          </div>
+
           <div className="form-row">
             <div className="form-group">
-              <label>Latitude</label>
-              <input type="number" step="any" value={form.latitude} onChange={e => setForm({...form, latitude: e.target.value})} />
+              <label>Latitude (manual)</label>
+              <input type="number" step="any" min="-90" max="90" value={form.latitude} onChange={e => setForm({...form, latitude: e.target.value})} />
             </div>
             <div className="form-group">
-              <label>Longitude</label>
-              <input type="number" step="any" value={form.longitude} onChange={e => setForm({...form, longitude: e.target.value})} />
+              <label>Longitude (manual)</label>
+              <input type="number" step="any" min="-180" max="180" value={form.longitude} onChange={e => setForm({...form, longitude: e.target.value})} />
             </div>
           </div>
           <div className="form-row">

@@ -9,6 +9,7 @@ import MapPage from './pages/MapPage';
 import ReportForm from './pages/ReportForm';
 import ReportDetail from './pages/ReportDetail';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminSummaries from './pages/AdminSummaries';
 import AdminUsers from './pages/AdminUsers';
 import AdminAuditLogs from './pages/AdminAuditLogs';
 import OfficerReports from './pages/OfficerReports';
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/reports/:id/edit" element={<ProtectedRoute allowedRoles={['reporter','admin']}><ReportForm /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
+        <Route path="/admin/summaries" element={<ProtectedRoute allowedRoles={['admin']}><AdminSummaries /></ProtectedRoute>} />
         <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['admin']}><AdminUsers /></ProtectedRoute>} />
         <Route path="/admin/audit-logs" element={<ProtectedRoute allowedRoles={['admin']}><AdminAuditLogs /></ProtectedRoute>} />
         <Route path="/officer" element={<ProtectedRoute allowedRoles={['traffic_officer','admin']}><OfficerReports /></ProtectedRoute>} />

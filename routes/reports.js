@@ -9,11 +9,17 @@ import { StatusHistory } from '../models/StatusHistory.js';
 import { Notification } from '../models/Notification.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { logAudit } from '../utils/helpers.js';
+import { detectFileType, sanitizeFileName } from '../utils/fileType.js';
 
 const router = express.Router();
-const upload = multer({ dest: 'uploads/', limits: { fileSize: 10 * 1024 * 1024 } });
+const UPLOAD_ROOT = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
+const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024;
+const upload = multer({ dest: UPLOAD_ROOT, limits: { fileSize: MAX_EVIDENCE_BYTES } });
 
 router.use(requireAuth);
+
+const STATUSES = ['submitted', 'under_review', 'needs_clarification', 'verified', 'assigned', 'in_progress', 'resolved', 'rejected'];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 router.post('/', requireRole('reporter', 'admin'), async (req, res, next) => {
   try {
@@ -31,8 +37,24 @@ router.post('/', requireRole('reporter', 'admin'), async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const status = req.query.status || null;
-    const reports = await Report.list(req.user, status);
+    const { status, category_id, date_from, date_to, q } = req.query;
+    if (status && !STATUSES.includes(String(status))) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'Unknown status filter' } });
+    }
+    if ((date_from && !DATE_RE.test(String(date_from))) || (date_to && !DATE_RE.test(String(date_to)))) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'Dates must be written as YYYY-MM-DD' } });
+    }
+    const categoryId = category_id ? Number(category_id) : null;
+    if (category_id && !Number.isInteger(categoryId)) {
+      return res.status(422).json({ error: { code: 'INVALID_FILTER', message: 'category_id must be a number' } });
+    }
+    const reports = await Report.list(req.user, {
+      status: status || null,
+      categoryId,
+      dateFrom: date_from || null,
+      dateTo: date_to || null,
+      search: q ? String(q).trim().slice(0, 100) || null : null
+    });
     res.json(reports);
   } catch (err) { next(err); }
 });
@@ -85,13 +107,17 @@ router.get('/:id/evidence/:evidenceId', async (req, res, next) => {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Evidence not found' } });
     }
     // Files live on disk outside the web root and are only streamed after this authorization check.
-    const uploadRoot = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
     const filePath = path.resolve(process.cwd(), evidence.file_path);
-    if (!filePath.startsWith(uploadRoot)) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+    if (!filePath.startsWith(UPLOAD_ROOT)) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Evidence file is missing from storage' } });
-    res.setHeader('Content-Type', evidence.mime_type || 'application/octet-stream');
+    // Only files stored as images are shown inline. Anything else downloads as an
+    // attachment with a generic type, and the sandbox policy stops any script
+    // inside a stored file from running with this site's origin.
+    const isImage = /^image\//.test(String(evidence.mime_type));
+    res.setHeader('Content-Type', isImage ? evidence.mime_type : 'application/octet-stream');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('Content-Disposition', `inline; filename="${String(evidence.file_name).replace(/["\r\n]/g, '')}"`);
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.setHeader('Content-Disposition', `${isImage ? 'inline' : 'attachment'}; filename="${sanitizeFileName(evidence.file_name)}"`);
     fs.createReadStream(filePath).on('error', next).pipe(res);
   } catch (err) { next(err); }
 });
@@ -103,12 +129,18 @@ router.post('/:id/evidence', requireRole('reporter', 'admin', 'traffic_officer')
     if (req.user.role === 'reporter' && report.reporter_id !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     if (req.user.role === 'traffic_officer' && report.assigned_to !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     if (!req.file) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'No file uploaded' } });
+    // The bytes decide the type; the browser-declared MIME type and filename are ignored.
+    const mimeType = await detectFileType(req.file.path);
+    if (!mimeType) {
+      await fs.promises.unlink(req.file.path).catch(() => {});
+      return res.status(422).json({ error: { code: 'UNSUPPORTED_FILE', message: 'Unsupported file type. Allowed: JPEG, PNG, GIF, WebP and PDF.' } });
+    }
     const evidence = await Evidence.create({
       reportId: report.id,
       uploaderId: req.user.id,
-      fileName: req.file.originalname,
+      fileName: sanitizeFileName(req.file.originalname),
       filePath: req.file.path,
-      mimeType: req.file.mimetype,
+      mimeType,
       description: req.body.description
     });
     await logAudit(req.user.id, 'UPLOAD_EVIDENCE', 'evidence', evidence.id, req, { report_id: report.id });
@@ -138,7 +170,10 @@ router.get('/:id/status-history', async (req, res, next) => {
   try {
     const report = await Report.findById(req.params.id);
     if (!report) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Report not found' } });
+    // Same visibility rules as GET /:id: reporters see their own reports, officers
+    // only the reports assigned to them.
     if (req.user.role === 'reporter' && report.reporter_id !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
+    if (req.user.role === 'traffic_officer' && report.assigned_to !== req.user.id) return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Access denied' } });
     const history = await StatusHistory.findByReport(report.id);
     res.json(history);
   } catch (err) { next(err); }

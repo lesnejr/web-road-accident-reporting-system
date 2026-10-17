@@ -6,7 +6,8 @@ const STATUS_ORDER = ['submitted','under_review','needs_clarification','verified
 const INJURY_STATUSES = ['none', 'injuries', 'fatalities', 'unknown'];
 
 // Server-side validation for new reports. Returns a map of field -> message, or null when valid.
-function validateReport(data) {
+// Exported so the rules can be tested without a database.
+export function validateReport(data) {
   const fields = {};
   if (!data.title || String(data.title).trim().length < 3) fields.title = 'Title is required';
   if (!data.description || !String(data.description).trim()) fields.description = 'Description is required';
@@ -43,13 +44,27 @@ export const Report = {
       err.details = problems;
       throw err;
     }
-    const report_reference = await generateReportReference();
-    const [result] = await pool.query(
-      `INSERT INTO reports (report_reference, reporter_id, accident_category_id, title, description, accident_date, accident_time, location, latitude, longitude, vehicle_type, injury_status, severity, vehicles_involved, injuries, fatalities, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted')`,
-      [report_reference, reporterId, data.accident_category_id, data.title, data.description, data.accident_date, data.accident_time, data.location, data.latitude, data.longitude, data.vehicle_type, data.injury_status, data.severity, data.vehicles_involved, data.injuries, data.fatalities]
-    );
-    return this.findById(result.insertId);
+    const values = (reportReference) => [
+      reportReference, reporterId, data.accident_category_id, data.title, data.description,
+      data.accident_date, data.accident_time, data.location, data.latitude, data.longitude,
+      data.vehicle_type, data.injury_status, data.severity, data.vehicles_involved, data.injuries, data.fatalities
+    ];
+    // The reference is derived from a row count, so two simultaneous submissions
+    // can compute the same value. A duplicate key is retried with a fresh count.
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        const [result] = await pool.query(
+          `INSERT INTO reports (report_reference, reporter_id, accident_category_id, title, description, accident_date, accident_time, location, latitude, longitude, vehicle_type, injury_status, severity, vehicles_involved, injuries, fatalities, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted')`,
+          values(await generateReportReference())
+        );
+        return this.findById(result.insertId);
+      } catch (err) {
+        if (err.code === 'ER_DUP_ENTRY' && attempt < 4) continue;
+        throw err;
+      }
+    }
+    throw new Error('Could not allocate a report reference');
   },
   async findById(id) {
     const [rows] = await pool.query(
@@ -73,8 +88,8 @@ export const Report = {
     );
     return rows[0];
   },
-  async list(user, status = null) {
-    const { query, params } = buildReportQuery(user, status);
+  async list(user, filters = {}) {
+    const { query, params } = buildReportQuery(user, filters);
     const [rows] = await pool.query(query, params);
     return rows;
   },
@@ -126,7 +141,8 @@ export const Report = {
   }
 };
 
-function buildReportQuery(user, status = null) {
+function buildReportQuery(user, filters = {}) {
+  const { status = null, categoryId = null, dateFrom = null, dateTo = null, search = null } = filters;
   // Every condition goes into WHERE. Officers see only reports assigned to them.
   const conditions = [];
   const params = [];
@@ -140,6 +156,23 @@ function buildReportQuery(user, status = null) {
   if (status) {
     conditions.push('r.status = ?');
     params.push(status);
+  }
+  if (categoryId) {
+    conditions.push('r.accident_category_id = ?');
+    params.push(categoryId);
+  }
+  if (dateFrom) {
+    conditions.push('r.accident_date >= ?');
+    params.push(dateFrom);
+  }
+  if (dateTo) {
+    conditions.push('r.accident_date <= ?');
+    params.push(dateTo);
+  }
+  if (search) {
+    const like = `%${search}%`;
+    conditions.push('(r.title LIKE ? OR r.location LIKE ? OR r.report_reference LIKE ?)');
+    params.push(like, like, like);
   }
   let query = `
     SELECT r.*, u.name as reporter_name, u.email as reporter_email,

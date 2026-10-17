@@ -78,6 +78,13 @@ router.patch('/users/:id', async (req, res, next) => {
     if (Object.keys(update).length === 0) {
       return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Nothing to update' } });
     }
+    // An administrator must never lock the system out of its last account.
+    if (target.role === 'admin' && target.is_active === 1 && update.is_active === 0) {
+      const activeAdmins = await User.countActiveAdmins();
+      if (activeAdmins <= 1) {
+        return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'The last active administrator cannot be deactivated' } });
+      }
+    }
     const user = await User.update(id, update);
     await logAudit(req.user.id, 'UPDATE_USER', 'user', id, req, update);
     res.json(user);
@@ -95,6 +102,12 @@ router.patch('/users/:id/role', async (req, res, next) => {
     if (!target) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'User not found' } });
     if (id === req.user.id && role !== 'admin') {
       return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'You cannot change your own role' } });
+    }
+    if (target.role === 'admin' && target.is_active === 1 && role !== 'admin') {
+      const activeAdmins = await User.countActiveAdmins();
+      if (activeAdmins <= 1) {
+        return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'The last active administrator cannot be demoted' } });
+      }
     }
     const user = await User.update(id, { role });
     await logAudit(req.user.id, 'USER_ROLE_CHANGED', 'user', id, req, { from: target.role, to: role });

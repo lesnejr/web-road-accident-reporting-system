@@ -3,37 +3,93 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
+const STATUS_OPTIONS = ['submitted', 'under_review', 'needs_clarification', 'verified', 'assigned', 'in_progress', 'resolved', 'rejected'];
+
 export default function ReportsList() {
   const { user } = useAuth();
   const [reports, setReports] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
-  const status = searchParams.get('status') || '';
+  const [searchText, setSearchText] = useState(searchParams.get('q') || '');
+  const [exportScope, setExportScope] = useState('true');
+  const [exporting, setExporting] = useState(false);
+
+  const filters = {
+    status: searchParams.get('status') || '',
+    category_id: searchParams.get('category_id') || '',
+    date_from: searchParams.get('date_from') || '',
+    date_to: searchParams.get('date_to') || '',
+    q: searchParams.get('q') || ''
+  };
+
+  // The search box is applied after a short pause so each keystroke is not a request.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchParams((previous) => {
+        const next = new URLSearchParams(previous);
+        if (searchText.trim()) next.set('q', searchText.trim());
+        else next.delete('q');
+        return next;
+      }, { replace: true });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchText, setSearchParams]);
 
   useEffect(() => {
+    api.get('/accident-categories').then(res => setCategories(res.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     async function load() {
       setLoading(true);
+      setError('');
       try {
-        const params = status ? { status } : {};
+        const params = {};
+        Object.entries(filters).forEach(([key, value]) => { if (value) params[key] = value; });
         const res = await api.get('/reports', { params });
-        setReports(res.data);
+        if (active) setReports(res.data);
       } catch (err) {
-        console.error(err);
+        if (active) setError(err.response?.data?.error?.message || 'Reports could not be loaded.');
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }
     load();
-  }, [status]);
+    return () => { active = false; };
+    // Filters are read from the URL; the object is rebuilt each render, so the
+    // dependency is the serialised query string.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.toString()]);
 
-  const handleStatusChange = (newStatus) => {
-    setSearchParams({ status: newStatus || '' });
+  const setFilter = (key, value) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      if (value) next.set(key, value);
+      else next.delete(key);
+      return next;
+    }, { replace: true });
   };
 
-  // CSV is fetched with the auth header and saved as a blob so the token never appears in a URL.
+  const clearFilters = () => {
+    setSearchText('');
+    setSearchParams({}, { replace: true });
+  };
+
+  const hasFilters = Object.values(filters).some(Boolean);
+
+  // CSV is fetched with the auth header and saved as a blob so the token never
+  // appears in a URL. The selected filters and scope are sent along, so the file
+  // matches what the table is showing.
   const downloadCsv = async () => {
+    setExporting(true);
+    setError('');
     try {
-      const res = await api.get('/summaries/reports/export?format=csv', { responseType: 'blob' });
+      const params = { format: 'csv', verified: exportScope };
+      Object.entries(filters).forEach(([key, value]) => { if (value) params[key] = value; });
+      const res = await api.get('/summaries/reports/export', { params, responseType: 'blob' });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
@@ -42,12 +98,12 @@ export default function ReportsList() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    } catch {
-      alert('Export failed');
+    } catch (err) {
+      setError(err.response?.data?.error?.message || 'Export failed.');
+    } finally {
+      setExporting(false);
     }
   };
-
-  const statusOptions = ['submitted','under_review','needs_clarification','verified','assigned','in_progress','resolved','rejected'];
 
   return (
     <div className="container">
@@ -57,49 +113,98 @@ export default function ReportsList() {
       </div>
 
       <div className="card">
-        <div className="status-filter">
-          <select value={status} onChange={e => handleStatusChange(e.target.value)}>
-            <option value="">All Statuses</option>
-            {statusOptions.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
-          </select>
-          {user.role === 'admin' && (
-            <button type="button" onClick={downloadCsv} className="btn btn-secondary">Export CSV</button>
-          )}
+        <div className="filter-bar">
+          <div className="form-group">
+            <label htmlFor="filter-status">Status</label>
+            <select id="filter-status" value={filters.status} onChange={e => setFilter('status', e.target.value)}>
+              <option value="">All statuses</option>
+              {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="filter-category">Accident type</label>
+            <select id="filter-category" value={filters.category_id} onChange={e => setFilter('category_id', e.target.value)}>
+              <option value="">All types</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="filter-from">Accident date from</label>
+            <input id="filter-from" type="date" value={filters.date_from} onChange={e => setFilter('date_from', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label htmlFor="filter-to">Accident date to</label>
+            <input id="filter-to" type="date" value={filters.date_to} onChange={e => setFilter('date_to', e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label htmlFor="filter-search">Search</label>
+            <input id="filter-search" type="search" placeholder="Reference, title or location" value={searchText} onChange={e => setSearchText(e.target.value)} />
+          </div>
+          <div className="form-group filter-actions">
+            <button type="button" className="btn btn-secondary" onClick={clearFilters} disabled={!hasFilters && !searchText}>
+              Clear filters
+            </button>
+          </div>
         </div>
+
+        {user.role === 'admin' && (
+          <div className="filter-bar" style={{ marginTop: '0.5rem' }}>
+            <div className="form-group">
+              <label htmlFor="export-scope">Export scope</label>
+              <select id="export-scope" value={exportScope} onChange={e => setExportScope(e.target.value)}>
+                <option value="true">Verified official records only</option>
+                <option value="all">All submitted (includes unverified)</option>
+                <option value="false">Unverified public submissions only</option>
+              </select>
+            </div>
+            <div className="form-group filter-actions">
+              <button type="button" onClick={downloadCsv} className="btn btn-secondary" disabled={exporting}>
+                {exporting ? 'Exporting...' : 'Export CSV with these filters'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {error && <div className="alert alert-error" role="alert">{error}</div>}
 
         {loading ? (
           <div>Loading...</div>
         ) : reports.length === 0 ? (
-          <p style={{ color: 'hsl(var(--text-3))' }}>No reports found.</p>
+          <p style={{ color: 'hsl(var(--text-3))' }}>
+            {hasFilters ? 'No reports match the selected filters.' : 'No reports found.'}
+          </p>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Reference</th>
-                <th>Title</th>
-                <th>Location</th>
-                <th>Category</th>
-                <th>Status</th>
-                <th>Date</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reports.map(r => (
-                <tr key={r.id}>
-                  <td>{r.report_reference}</td>
-                  <td><Link to={`/reports/${r.id}`}>{r.title}</Link></td>
-                  <td>{r.location}</td>
-                  <td>{r.category_name || '-'}</td>
-                  <td><span className={`badge badge-${r.status}`}>{r.status.replace('_', ' ')}</span></td>
-                  <td>{new Date(r.created_at).toLocaleDateString()}</td>
-                  <td>
-                    <Link to={`/reports/${r.id}`} className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}>View</Link>
-                  </td>
+          <>
+            <p className="muted" style={{ marginBottom: '0.5rem' }}>{reports.length} report{reports.length === 1 ? '' : 's'}</p>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Reference</th>
+                  <th>Title</th>
+                  <th>Location</th>
+                  <th>Category</th>
+                  <th>Status</th>
+                  <th>Date</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {reports.map(r => (
+                  <tr key={r.id}>
+                    <td>{r.report_reference}</td>
+                    <td><Link to={`/reports/${r.id}`}>{r.title}</Link></td>
+                    <td>{r.location}</td>
+                    <td>{r.category_name || '-'}</td>
+                    <td><span className={`badge badge-${r.status}`}>{r.status.replace(/_/g, ' ')}</span></td>
+                    <td>{new Date(r.created_at).toLocaleDateString()}</td>
+                    <td>
+                      <Link to={`/reports/${r.id}`} className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}>View</Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </div>
     </div>

@@ -15,6 +15,8 @@ export default function Layout() {
     { to: '/notifications', label: 'Notifications', roles: ['reporter','admin','traffic_officer'] },
     { to: '/officer', label: 'Officer', roles: ['traffic_officer','admin'] },
     { to: '/admin', label: 'Admin', roles: ['admin'] },
+    { to: '/admin/summaries', label: 'Summaries', roles: ['admin'] },
+    { to: '/admin/users', label: 'Users', roles: ['admin'] },
   ];
 
   const visibleNav = navItems.filter(item => item.roles.includes(user?.role));

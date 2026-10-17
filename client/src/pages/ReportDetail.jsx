@@ -14,6 +14,13 @@ export default function ReportDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [statusLoading, setStatusLoading] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [action, setAction] = useState(null);
+  const [actionText, setActionText] = useState('');
+  const [officers, setOfficers] = useState([]);
+  const [assignTo, setAssignTo] = useState('');
+  const [pendingFile, setPendingFile] = useState(null);
+  const [fileDesc, setFileDesc] = useState('');
 
   useEffect(() => {
     async function load() {
@@ -31,8 +38,18 @@ export default function ReportDetail() {
     load();
   }, [id]);
 
+  // The assignment picker needs the officer list, which only admins may read.
+  useEffect(() => {
+    if (user.role !== 'admin') return;
+    api.get('/users', { params: { role: 'traffic_officer', is_active: 1 } })
+      .then(res => setOfficers(res.data))
+      .catch(() => {});
+  }, [user.role]);
+
   const handleStatusChange = async (newStatus, reason) => {
     setStatusLoading(true);
+    setError('');
+    setNotice('');
     try {
       if (user.role === 'admin') {
         await api.patch(`/reports/${id}/verify`, { status: newStatus, verification_notes: reason });
@@ -42,8 +59,11 @@ export default function ReportDetail() {
       const res = await api.get(`/reports/${id}`);
       setReport(res.data);
       setHistory(res.data.status_history || []);
+      setNotice(`Status changed to ${newStatus.replace(/_/g, ' ')}.`);
+      setAction(null);
+      setActionText('');
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Update failed');
+      setError(err.response?.data?.error?.message || 'Update failed');
     } finally {
       setStatusLoading(false);
     }
@@ -51,13 +71,18 @@ export default function ReportDetail() {
 
   const handleAssign = async (officerId) => {
     setStatusLoading(true);
+    setError('');
+    setNotice('');
     try {
       await api.patch(`/reports/${id}/verify`, { status: 'assigned', assignedTo: officerId });
       const res = await api.get(`/reports/${id}`);
       setReport(res.data);
       setHistory(res.data.status_history || []);
+      setNotice('Report assigned to the selected officer.');
+      setAction(null);
+      setAssignTo('');
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Assign failed');
+      setError(err.response?.data?.error?.message || 'Assign failed');
     } finally {
       setStatusLoading(false);
     }
@@ -65,12 +90,17 @@ export default function ReportDetail() {
 
   const handleFindings = async (findings) => {
     setStatusLoading(true);
+    setError('');
+    setNotice('');
     try {
       await api.post(`/traffic-officer/reports/${id}/findings`, { findings });
       const res = await api.get(`/reports/${id}`);
       setReport(res.data);
+      setNotice('Findings saved.');
+      setAction(null);
+      setActionText('');
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Failed');
+      setError(err.response?.data?.error?.message || 'Failed to save findings');
     } finally {
       setStatusLoading(false);
     }
@@ -80,12 +110,15 @@ export default function ReportDetail() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('description', description);
+    setError('');
+    setNotice('');
     try {
       await api.post(`/reports/${id}/evidence`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       const res = await api.get(`/reports/${id}`);
       setEvidence(res.data.evidence || []);
+      setNotice('Evidence uploaded.');
     } catch (err) {
-      alert(err.response?.data?.error?.message || 'Upload failed');
+      setError(err.response?.data?.error?.message || 'Upload failed');
     }
   };
 
@@ -97,7 +130,7 @@ export default function ReportDetail() {
       window.open(url, '_blank');
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch {
-      alert('Could not open the evidence file');
+      setError('Could not open the evidence file');
     }
   };
 
@@ -118,7 +151,8 @@ export default function ReportDetail() {
         {canEdit && <Link to={`/reports/${id}/edit`} className="btn btn-secondary">Edit</Link>}
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error" role="alert">{error}</div>}
+      {notice && <div className="alert alert-success" role="status">{notice}</div>}
 
       <div className="card">
         <h3>Details</h3>
@@ -134,7 +168,7 @@ export default function ReportDetail() {
           <div><strong>Injuries:</strong> {report.injuries || 0}</div>
           <div><strong>Fatalities:</strong> {report.fatalities || 0}</div>
           <div><strong>Reporter:</strong> {report.reporter_name} ({report.reporter_email})</div>
-          <div><strong>Status:</strong> <span className={`badge badge-${report.status}`}>{report.status.replace('_', ' ')}</span></div>
+          <div><strong>Status:</strong> <span className={`badge badge-${report.status}`}>{report.status.replace(/_/g, ' ')}</span></div>
           {report.assigned_to && <div><strong>Assigned To:</strong> Officer #{report.assigned_to}</div>}
           {report.verified_by && <div><strong>Verified By:</strong> Admin #{report.verified_by} at {new Date(report.verified_at).toLocaleString()}</div>}
           {report.verification_notes && <div><strong>Verification Notes:</strong> {report.verification_notes}</div>}
@@ -157,55 +191,135 @@ export default function ReportDetail() {
       {canOfficerAct && (
         <div className="card">
           <h3>Officer Actions</h3>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             {['in_progress','needs_clarification','resolved'].map(s => (
               <button key={s} className={`btn ${report.status === s ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => handleStatusChange(s, prompt('Reason (optional):'))}
+                onClick={() => { setAction({ type: 'status', status: s }); setActionText(''); }}
                 disabled={statusLoading || report.status === s}
               >
-                {s.replace('_', ' ')}
+                {s.replace(/_/g, ' ')}
               </button>
             ))}
-            <button className="btn btn-primary" onClick={() => {
-              const f = prompt('Enter findings:');
-              if (f) handleFindings(f);
-            }} disabled={statusLoading}>Add Findings</button>
+            <button className="btn btn-primary" onClick={() => { setAction({ type: 'findings' }); setActionText(report.findings || ''); }} disabled={statusLoading}>
+              {report.findings ? 'Edit Findings' : 'Add Findings'}
+            </button>
           </div>
+
+          {action?.type === 'status' && (
+            <div className="action-panel">
+              <label htmlFor="officer-reason">
+                {action.status === 'needs_clarification' ? 'What information is missing? (required)' : 'Notes (optional)'}
+              </label>
+              <textarea id="officer-reason" rows={3} value={actionText} onChange={e => setActionText(e.target.value)}
+                placeholder={action.status === 'needs_clarification' ? 'Tell the reporter what additional information they should add' : 'Anything the reporter should know'} />
+              <div className="action-buttons">
+                <button className="btn btn-primary" disabled={statusLoading || (action.status === 'needs_clarification' && !actionText.trim())}
+                  onClick={() => handleStatusChange(action.status, actionText)}>
+                  Confirm move to {action.status.replace(/_/g, ' ')}
+                </button>
+                <button className="btn btn-secondary" disabled={statusLoading} onClick={() => setAction(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {action?.type === 'findings' && (
+            <div className="action-panel">
+              <label htmlFor="officer-findings">Findings</label>
+              <textarea id="officer-findings" rows={4} value={actionText} onChange={e => setActionText(e.target.value)}
+                placeholder="What did you find when you responded to this accident?" />
+              <div className="action-buttons">
+                <button className="btn btn-primary" disabled={statusLoading || !actionText.trim()} onClick={() => handleFindings(actionText)}>Save findings</button>
+                <button className="btn btn-secondary" disabled={statusLoading} onClick={() => setAction(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {isAdmin && (
         <div className="card">
           <h3>Admin Actions</h3>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             {['verified','rejected','under_review','needs_clarification'].map(s => (
               <button key={s} className={`btn ${['verified','rejected'].includes(s) ? 'btn-danger' : 'btn-secondary'}`}
-                onClick={() => handleStatusChange(s, prompt('Notes (optional):'))}
+                onClick={() => { setAction({ type: 'admin-status', status: s }); setActionText(''); }}
                 disabled={statusLoading || report.status === s}
               >
-                {s.replace('_', ' ')}
+                {s.replace(/_/g, ' ')}
               </button>
             ))}
-            <button className="btn btn-primary" onClick={() => {
-              const officerId = prompt('Assign to officer ID:');
-              if (officerId) handleAssign(Number(officerId));
-            }} disabled={statusLoading}>Assign Officer</button>
+            <button className="btn btn-primary" onClick={() => { setAction({ type: 'assign' }); setAssignTo(''); }} disabled={statusLoading}>Assign Officer</button>
           </div>
+
+          {action?.type === 'admin-status' && (
+            <div className="action-panel">
+              <label htmlFor="admin-notes">
+                {action.status === 'rejected'
+                  ? 'Why is this report rejected? (required)'
+                  : action.status === 'needs_clarification'
+                    ? 'What should the reporter add? (required)'
+                    : 'Verification notes (optional)'}
+              </label>
+              <textarea id="admin-notes" rows={3} value={actionText} onChange={e => setActionText(e.target.value)}
+                placeholder={action.status === 'rejected' ? 'For example: duplicate of an existing report' : 'Notes recorded with this decision'} />
+              <div className="action-buttons">
+                <button className="btn btn-primary" disabled={statusLoading || (['rejected','needs_clarification'].includes(action.status) && !actionText.trim())}
+                  onClick={() => handleStatusChange(action.status, actionText)}>
+                  Confirm {action.status.replace(/_/g, ' ')}
+                </button>
+                <button className="btn btn-secondary" disabled={statusLoading} onClick={() => setAction(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {action?.type === 'assign' && (
+            <div className="action-panel">
+              <label htmlFor="assign-officer">Assign to traffic officer</label>
+              {officers.length === 0 ? (
+                <p className="muted">No active traffic officers found. Create one in User Management first.</p>
+              ) : (
+                <select id="assign-officer" value={assignTo} onChange={e => setAssignTo(e.target.value)}>
+                  <option value="">Select an officer</option>
+                  {officers.map(o => <option key={o.id} value={o.id}>{o.name} ({o.email})</option>)}
+                </select>
+              )}
+              <div className="action-buttons">
+                <button className="btn btn-primary" disabled={statusLoading || !assignTo} onClick={() => handleAssign(Number(assignTo))}>Assign</button>
+                <button className="btn btn-secondary" disabled={statusLoading} onClick={() => setAction(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <h3>Evidence</h3>
-          <input type="file" id={`evidence-${id}`} style={{ display: 'none' }} onChange={e => {
+          <input type="file" id={`evidence-${id}`} accept=".jpg,.jpeg,.png,.gif,.webp,.pdf" style={{ display: 'none' }} onChange={e => {
             if (e.target.files[0]) {
-              const desc = prompt('Description (optional):');
-              uploadEvidence(e.target.files[0], desc || '');
+              setPendingFile(e.target.files[0]);
+              setFileDesc('');
               e.target.value = '';
             }
           }} />
           <label htmlFor={`evidence-${id}`} className="btn btn-secondary">Upload Evidence</label>
         </div>
+
+        {pendingFile && (
+          <div className="action-panel">
+            <p><strong>{pendingFile.name}</strong> ({Math.max(1, Math.round(pendingFile.size / 1024))} KB)</p>
+            <p className="muted">Accepted: JPEG, PNG, GIF, WebP or PDF, up to 10 MB. The server checks the file content, not the extension.</p>
+            <label htmlFor="evidence-desc">Description (optional)</label>
+            <input id="evidence-desc" value={fileDesc} onChange={e => setFileDesc(e.target.value)} placeholder="For example: photo of the damaged vehicle" />
+            <div className="action-buttons">
+              <button className="btn btn-primary" disabled={statusLoading} onClick={async () => { await uploadEvidence(pendingFile, fileDesc); setPendingFile(null); }}>
+                Upload
+              </button>
+              <button className="btn btn-secondary" onClick={() => setPendingFile(null)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
         {evidence.length === 0 ? <p style={{ color: 'hsl(var(--text-3))' }}>No evidence attached.</p> : (
           <div>
             {evidence.map(e => (
@@ -230,8 +344,8 @@ export default function ReportDetail() {
             <tbody>
               {history.map(h => (
                 <tr key={h.id}>
-                  <td>{h.old_status ? h.old_status.replace('_', ' ') : '-'}</td>
-                  <td><span className={`badge badge-${h.new_status}`}>{h.new_status.replace('_', ' ')}</span></td>
+                  <td>{h.old_status ? h.old_status.replace(/_/g, ' ') : '-'}</td>
+                  <td><span className={`badge badge-${h.new_status}`}>{h.new_status.replace(/_/g, ' ')}</span></td>
                   <td>{h.changed_by_name}</td>
                   <td>{h.reason || '-'}</td>
                   <td>{new Date(h.changed_at).toLocaleString()}</td>
