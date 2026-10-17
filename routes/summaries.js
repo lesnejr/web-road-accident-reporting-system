@@ -24,6 +24,10 @@ function renderPdf(res, filename, headerLines, renderBody) {
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  // An aborted download or a pdfkit failure must not surface as an unhandled
+  // stream error after the headers are already sent.
+  doc.on('error', (err) => res.destroy(err));
+  res.on('close', () => { if (!doc.destroyed) doc.destroy(); });
   doc.pipe(res);
   for (const headerLine of headerLines) {
     doc.font('Helvetica').fontSize(9).fillColor('#444444').text(headerLine.replace(/^#\s*/, ''));

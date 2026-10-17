@@ -10,26 +10,6 @@ export async function generateReportReference() {
   return `RA-${year}-${String(next).padStart(6, '0')}`;
 }
 
-export function buildReportQuery(user) {
-  let query = `
-    SELECT r.*, u.name as reporter_name, u.email as reporter_email,
-           ac.name as category_name
-    FROM reports r
-    JOIN users u ON r.reporter_id = u.id
-    LEFT JOIN accident_categories ac ON r.accident_category_id = ac.id
-  `;
-  const params = [];
-  if (user.role === 'reporter') {
-    query += ' WHERE r.reporter_id = ?';
-    params.push(user.id);
-  } else if (user.role === 'traffic_officer') {
-    query += ' WHERE r.assigned_to = ? OR r.status IN (?, ?)';
-    params.push(user.id, 'submitted', 'under_review');
-  }
-  query += ' ORDER BY r.created_at DESC';
-  return { query, params };
-}
-
 export function logAudit(userId, action, entityType, entityId, req, details = null) {
   return pool.query(
     'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, ip_address, user_agent, details) VALUES (?, ?, ?, ?, ?, ?, ?)',

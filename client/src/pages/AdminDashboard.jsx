@@ -82,6 +82,11 @@ export default function AdminDashboard() {
                 Accident types could not be loaded, so the type filter is limited.
               </p>
             )}
+            {error && data && (
+              <p role="alert" className="ad-sub" style={{ marginTop: '0.25rem' }}>
+                The latest figures could not be loaded; showing the previous result.
+              </p>
+            )}
           </header>
 
           <div className="ad-kp">

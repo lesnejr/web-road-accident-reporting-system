@@ -30,6 +30,7 @@ export default function ReportForm() {
   const isEdit = !!id;
   const [form, setForm] = useState(initialForm);
   const [categories, setCategories] = useState([]);
+  const [categoriesError, setCategoriesError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);

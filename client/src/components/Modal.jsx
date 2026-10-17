@@ -6,6 +6,8 @@ import { useEffect, useId, useRef } from 'react';
 export default function Modal({ open, title, onClose, children, maxWidth }) {
   const dialogRef = useRef(null);
   const previouslyFocused = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const titleId = useId();
 
   useEffect(() => {
@@ -13,14 +15,14 @@ export default function Modal({ open, title, onClose, children, maxWidth }) {
     previouslyFocused.current = document.activeElement;
     const node = dialogRef.current;
     const focusables = () =>
-      node.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      node.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
     const first = focusables()[0];
     if (first) first.focus();
 
     const onKeyDown = (event) => {
       if (event.key === 'Escape') {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab') return;
@@ -28,7 +30,10 @@ export default function Modal({ open, title, onClose, children, maxWidth }) {
       if (items.length === 0) return;
       const firstItem = items[0];
       const lastItem = items[items.length - 1];
-      if (event.shiftKey && document.activeElement === firstItem) {
+      if (!node.contains(document.activeElement)) {
+        event.preventDefault();
+        firstItem.focus();
+      } else if (event.shiftKey && document.activeElement === firstItem) {
         event.preventDefault();
         lastItem.focus();
       } else if (!event.shiftKey && document.activeElement === lastItem) {
@@ -36,12 +41,17 @@ export default function Modal({ open, title, onClose, children, maxWidth }) {
         firstItem.focus();
       }
     };
-    node.addEventListener('keydown', onKeyDown);
+    // Bound to the document so Esc and the focus trap keep working when focus
+    // falls to the body, for example while both dialog buttons are disabled
+    // during an in-flight request.
+    document.addEventListener('keydown', onKeyDown);
     return () => {
-      node.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keydown', onKeyDown);
       if (previouslyFocused.current && previouslyFocused.current.focus) previouslyFocused.current.focus();
     };
-  }, [open, onClose]);
+    // Intentionally not depending on onClose: callers pass inline arrows, and
+    // re-running would re-capture focus on every parent render.
+  }, [open]);
 
   if (!open) return null;
   return (

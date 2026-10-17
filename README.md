@@ -138,7 +138,7 @@ The admin report page lists possible duplicates for the report being viewed. A c
 - The web client only; the mobile app is excluded by team decision.
 - The admin UI ships the CSV download button; PDF uses the same endpoint with `format=pdf` and has no dedicated button yet.
 - Summaries return at most the 50 most recent periods for a chosen range.
-- `GET /api/reports` pagination is opt-in: the client always sends `page`; callers that omit it receive the legacy array shape.
+- `GET /api/reports` pagination is opt-in: the reports list page always sends `page`; the dashboard and map pages intentionally use the legacy array shape.
 - Rate limiting and the logout blocklist are in-memory (single-process deployments only).
 - Tokens are stored in `localStorage` (documented XSS trade-off, mitigated by the evidence-serving CSP and by never rendering user-supplied HTML).
 - `database/migrations/002_notifications.sql` uses MariaDB's `CREATE INDEX IF NOT EXISTS` syntax; on stock Oracle MySQL, adjust that line.
