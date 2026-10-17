@@ -8,3 +8,4 @@ client/dist/
 # Uploaded evidence is data, not source. Never commit it.
 uploads/
 coverage/
+.superpowers/
