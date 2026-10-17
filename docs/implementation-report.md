@@ -4,6 +4,8 @@ Date: 2026-10-17
 Scope: web application only (mobile development explicitly out of scope).
 Baseline commit: `0794b19` (working tree had no uncommitted user changes when work started; nothing has been committed since).
 
+> Superseded: this report records the **first session** only (before the completion pass). The current state, the verification evidence and the final status are in `docs/final-report.md`; `docs/requirements-matrix.md` is up to date as of 2026-10-17.
+
 This report follows the required progress-report structure. All commands listed under "Tests executed" were run in this session; results are copied from their actual output.
 
 ---
