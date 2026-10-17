@@ -49,14 +49,12 @@ tests/                 backend unit tests (node --test)
    ```
    Then edit `.env` and set a long random `JWT_SECRET`. Never commit `.env` (it is gitignored).
 3. Start MySQL in the XAMPP Control Panel (Start MySQL button) and confirm port 3306 listens.
-4. Create the database and load the schema **once, in this order**:
+4. Create the database, apply the schema and migrations, and seed accident categories in one repeatable step:
    ```
-   mysql -u root < database/schema.sql
-   mysql -u root accident_reporting < database/migrations/002_notifications.sql
+   npm run db:setup
    ```
-   The migration creates the `notifications` table, which the base schema file does not include. Do not re-run these files against a database that already has data.
-5. (Optional) import `database/seed.sql` for accident categories. It does not create accounts: earlier versions shipped placeholder password hashes that could never authenticate, and a seed file must not publish a default admin password.
-6. Create the first administrator:
+   Safe to re-run: applied migrations are tracked in `schema_migrations`, the schema and seed are idempotent, and no data is ever dropped or overwritten. It also creates three **local development accounts** — `admin@local.test`, `officer@local.test`, `reporter@local.test` — and prints each generated password once. Save those passwords; they are not stored in the repository. Rotate them any time with `npm run db:setup -- --reset-dev-passwords`, or force a known password for local testing by setting `DEV_SEED_PASSWORD` (never commit it).
+5. Create a real administrator for anything beyond local development:
    ```
    npm run create-admin -- --name "System Admin" --email admin@example.org
    ```
